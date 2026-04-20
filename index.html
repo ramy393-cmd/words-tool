@@ -3,8 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0b1220">
-<link rel="manifest" href="manifest.json">
 <title>Words Tool 🚀</title>
 
 <style>
@@ -14,7 +12,6 @@ h2{color:#38bdf8;margin:10px}
 .container{display:flex;gap:10px;padding:10px}
 .left{flex:3}
 .right{flex:1;background:#1e293b;padding:10px;border-radius:10px}
-@media(max-width:768px){.container{flex-direction:column}}
 
 textarea,input{
 width:100%;padding:10px;margin:6px 0;
@@ -28,50 +25,29 @@ border:none;border-radius:8px;
 background:#38bdf8;color:#000;font-weight:bold
 }
 
-.status{
-display:flex;align-items:center;gap:6px;
-background:#0f172a;padding:8px;border-radius:6px;margin-bottom:10px
-}
-
-.dot{width:10px;height:10px;border-radius:50%}
-.green{background:#22c55e}
-.yellow{background:#facc15}
-.red{background:#ef4444}
-
-.toggle{display:flex;gap:10px;padding:10px}
-.toggle button{flex:1}
-
-.table-wrap{overflow-x:auto}
+/* table */
 table{width:100%;border-collapse:collapse}
 th,td{border:1px solid #334155;padding:8px}
 th{background:#1e293b;color:#38bdf8}
 
-/* تثبيت الكلمة */
-td:nth-child(1), td:nth-child(2){
-white-space:nowrap;
-}
-
-/* النص */
-td:nth-child(3), td:nth-child(4){
+td:nth-child(3),td:nth-child(4){
 max-width:350px;
 vertical-align:top;
 }
 
-/* الأزرار */
+/* actions */
 .actions{
 display:flex;
 gap:6px;
 justify-content:center;
-align-items:center;
-flex-wrap:nowrap;
 }
 
 .action-btn{
+background:#38bdf8;
 padding:4px 6px;
 border-radius:6px;
-background:#38bdf8;
+cursor:pointer;
 color:#000;
-cursor:pointer
 }
 
 /* read more */
@@ -89,6 +65,15 @@ font-size:12px;
 display:block;
 margin-top:4px;
 }
+
+/* collapse */
+.toggle-more{
+color:#38bdf8;
+cursor:pointer;
+font-size:12px;
+margin-top:4px;
+display:block;
+}
 </style>
 </head>
 
@@ -99,24 +84,14 @@ margin-top:4px;
 <div class="container">
 <div class="left">
 <textarea id="input" placeholder="Words"></textarea>
-<textarea id="chat" placeholder="definition -- example OR --example"></textarea>
+<textarea id="chat" placeholder="definition -- example"></textarea>
 </div>
 
 <div class="right">
-<div class="status">
-<span id="dot" class="dot"></span>
-<span id="statusText">Ready</span>
-</div>
-
 <button onclick="generate()">Generate Prompt</button>
 <button onclick="save()">Save</button>
 <button onclick="clearAll()">Clear</button>
 </div>
-</div>
-
-<div class="toggle">
-<button onclick="setView('table')">Table</button>
-<button onclick="setView('cards')">Cards</button>
 </div>
 
 <div style="padding:10px">
@@ -126,23 +101,12 @@ margin-top:4px;
 
 <script>
 
-const API="https://script.google.com/macros/s/AKfycbwQHi9XYwqzFbQHHfqCf8rv2aeCdQ6ejK3w93zdCPJpHl46nl_CrQCRtZ60i0vk-3c/exec";
+const API="PUT_YOUR_API_HERE";
 
 let data={}
-let viewMode="table"
-
-/* ===== STATUS ===== */
-function updateStatus(msg,type){
-statusText.innerText=msg
-dot.className="dot"
-if(type==="success") dot.classList.add("green")
-if(type==="pending") dot.classList.add("yellow")
-if(type==="error") dot.classList.add("red")
-}
 
 /* ===== LOAD ===== */
 async function load(){
-
 let saved=localStorage.getItem("wordsData")
 if(saved){
 data=JSON.parse(saved)
@@ -163,10 +127,7 @@ if(!newData[w]) newData[w]=[]
 let exists=newData[w].some(d=>d.def===i.definition && d.ex===i.example)
 
 if(!exists){
-newData[w].push({
-def:i.definition,
-ex:i.example||""
-})
+newData[w].push({def:i.definition,ex:i.example||""})
 }
 })
 
@@ -176,78 +137,55 @@ localStorage.setItem("wordsData",JSON.stringify(data))
 render()
 }
 
-updateStatus("Synced","success")
-
-}catch{
-updateStatus("Offline","error")
-}
+}catch{}
 }
 
 /* ===== PARSE ===== */
 function parseLine(text){
-text=text.trim().replace(/\*\*/g,"")
-
-if(text.startsWith("--")){
-return {def:"",ex:text.replace(/^--+/,"").trim()}
-}
-
 if(text.includes("--")){
 let p=text.split("--")
 return {def:p[0].trim(),ex:p.slice(1).join("--").trim()}
 }
-
 return {def:text,ex:""}
 }
 
 /* ===== SAVE ===== */
 async function save(){
+let words=input.value.split("\n").filter(Boolean)
+let lines=chat.value.split("\n").filter(Boolean)
 
-let words=input.value.split("\n").map(x=>x.trim()).filter(Boolean)
-let lines=chat.value.split("\n").map(x=>x.trim()).filter(Boolean)
+for(let i=0;i<words.length;i++){
+let w=words[i].toLowerCase()
+let p=parseLine(lines[i]||"")
 
-updateStatus("Saving...","pending")
+if(!data[w]) data[w]=[]
 
-for(let i=0;i<(words.length||lines.length);i++){
-
-let word=(words[i]||"").toLowerCase()
-let parsed=parseLine(lines[i]||"")
-
-if(!data[word]) data[word]=[]
-
-let exists=data[word].some(d=>
-d.def.toLowerCase()===parsed.def.toLowerCase() &&
-d.ex.toLowerCase()===parsed.ex.toLowerCase()
-)
+let exists=data[w].some(d=>d.def===p.def && d.ex===p.ex)
 
 if(!exists){
-
-data[word].push(parsed)
+data[w].push(p)
 localStorage.setItem("wordsData",JSON.stringify(data))
 
 await fetch(API,{
 method:"POST",
 body:JSON.stringify({
 action:"save",
-word,
-definition:parsed.def,
-example:parsed.ex
+word:w,
+definition:p.def,
+example:p.ex
 })
 })
-
 }
 }
 
 render()
-updateStatus("Saved","success")
 }
 
 /* ===== READ MORE ===== */
 function formatText(text){
 if(!text) return ""
 
-if(text.length < 120){
-return text
-}
+if(text.length < 120) return text
 
 let id="t"+Math.random()
 
@@ -262,86 +200,89 @@ this.remove();
 `
 }
 
+/* ===== COLLAPSE ===== */
+function renderDefs(w, defs){
+
+let id="d"+Math.random()
+
+let defsArr = Array.isArray(defs)?defs:[defs]
+
+let first = `<div>${formatText(defsArr[0].def)}</div>`
+
+if(defsArr.length===1) return first
+
+let rest = defsArr.slice(1).map(d=>`<div>${formatText(d.def)}</div>`).join("")
+
+return `
+<div>
+${first}
+<div id="${id}" style="display:none">${rest}</div>
+<span class="toggle-more" onclick="
+let el=document.getElementById('${id}')
+if(el.style.display==='none'){
+el.style.display='block'
+this.innerText='Hide'
+}else{
+el.style.display='none'
+this.innerText='Show all'
+}
+">Show all (${defsArr.length})</span>
+</div>
+`
+}
+
 /* ===== RENDER ===== */
 function render(){
 
 let s=search.value.toLowerCase()
 
 let list=Object.keys(data).filter(w=>
-w.includes(s) || (Array.isArray(data[w])?data[w]:[data[w]]).some(d=>d.def.includes(s)||d.ex.includes(s))
+w.includes(s)
 ).reverse()
 
-let html="<div class='table-wrap'><table>"
+let html="<table>"
 html+="<tr><th>#</th><th>Word</th><th>Definition</th><th>Example</th><th>Action</th></tr>"
 
 let i=list.length
 
 list.forEach(w=>{
 
-let defs = Array.isArray(data[w]) ? data[w] : [data[w]]
+let defs = Array.isArray(data[w])?data[w]:[data[w]]
 
-let defHTML=defs.map((d,idx)=>`<div><b>${idx+1}.</b> ${formatText(d.def)}</div>`).join("")
-let exHTML=defs.map(d=>`<div style="color:#facc15">${formatText(d.ex)}</div>`).join("")
+let defHTML = renderDefs(w, defs)
+let exHTML = defs.map(d=>`<div style="color:#facc15">${formatText(d.ex)}</div>`).join("")
 
-html+=`<tr>
+html+=`
+<tr>
 <td>${i}</td>
 <td>${w}</td>
 <td>${defHTML}</td>
 <td>${exHTML}</td>
 <td class="actions">
-<span class="action-btn" onclick="speak('${w}')">🔊</span>
-<span class="action-btn" onclick="editWord('${w}')">✏️</span>
-<span class="action-btn" onclick="deleteWord('${w}')">❌</span>
+<span class="action-btn">🔊</span>
+<span class="action-btn">✏️</span>
+<span class="action-btn">❌</span>
 </td>
-</tr>`
+</tr>
+`
 
 i--
 })
 
-html+="</table></div>"
+html+="</table>"
 
 out.innerHTML=html
-}
-
-/* ===== HELPERS ===== */
-function speak(w){
-speechSynthesis.speak(new SpeechSynthesisUtterance(w))
-}
-
-function editWord(w){
-let d=(Array.isArray(data[w])?data[w]:[data[w]])[0]
-chat.value=`${w}: ${d.def} -- ${d.ex}`
-}
-
-function deleteWord(w){
-if(!confirm("Delete all definitions?")) return
-delete data[w]
-localStorage.setItem("wordsData",JSON.stringify(data))
-fetch(API,{method:"POST",body:JSON.stringify({action:"delete",word:w})})
-render()
 }
 
 function clearAll(){
 input.value=""
 chat.value=""
-updateStatus("Ready")
 }
 
-function setView(v){
-viewMode=v
-render()
-}
-
-/* ===== PROMPT ===== */
 function generate(){
-navigator.clipboard.writeText(`For each term return:
-definition -- example
-Rules:
-- Do NOT repeat the word`)
 window.open("https://chat.openai.com","_blank")
 }
 
-/* ===== INIT ===== */
 load()
 
 </script>
