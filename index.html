@@ -46,18 +46,18 @@ table{width:100%;border-collapse:collapse}
 th,td{border:1px solid #334155;padding:8px}
 th{background:#1e293b;color:#38bdf8}
 
-/* تثبيت الكلمة والرقم */
+/* تثبيت الكلمة */
 td:nth-child(1), td:nth-child(2){
 white-space:nowrap;
 }
 
-/* التحكم في النص */
+/* النص */
 td:nth-child(3), td:nth-child(4){
 max-width:350px;
 vertical-align:top;
 }
 
-/* منع كسر الأزرار */
+/* الأزرار */
 .actions{
 display:flex;
 gap:6px;
@@ -88,24 +88,6 @@ cursor:pointer;
 font-size:12px;
 display:block;
 margin-top:4px;
-}
-
-/* cards */
-.flashcard{
-background:#1e293b;padding:15px;margin:10px;border-radius:12px
-}
-
-.flashcard .word{color:#38bdf8;font-weight:bold;font-size:18px}
-.flashcard .def{margin-top:10px;font-size:14px}
-
-.flashcard .actions{display:flex;gap:6px;margin-top:10px}
-
-.flashcard .actions button{
-width:32px;height:32px;padding:0
-}
-
-@media(max-width:768px){
-.table-wrap{display:none}
 }
 </style>
 </head>
@@ -147,9 +129,9 @@ width:32px;height:32px;padding:0
 const API="https://script.google.com/macros/s/AKfycbwQHi9XYwqzFbQHHfqCf8rv2aeCdQ6ejK3w93zdCPJpHl46nl_CrQCRtZ60i0vk-3c/exec";
 
 let data={}
-let viewMode=window.innerWidth<768?"cards":"table"
+let viewMode="table"
 
-/* STATUS */
+/* ===== STATUS ===== */
 function updateStatus(msg,type){
 statusText.innerText=msg
 dot.className="dot"
@@ -158,8 +140,9 @@ if(type==="pending") dot.classList.add("yellow")
 if(type==="error") dot.classList.add("red")
 }
 
-/* LOAD */
+/* ===== LOAD ===== */
 async function load(){
+
 let saved=localStorage.getItem("wordsData")
 if(saved){
 data=JSON.parse(saved)
@@ -174,18 +157,25 @@ let newData={}
 
 j.data.forEach(i=>{
 let w=i.word.toLowerCase()
+
 if(!newData[w]) newData[w]=[]
 
 let exists=newData[w].some(d=>d.def===i.definition && d.ex===i.example)
 
 if(!exists){
-newData[w].push({def:i.definition,ex:i.example||""})
+newData[w].push({
+def:i.definition,
+ex:i.example||""
+})
 }
 })
 
+if(Object.keys(newData).length>0){
 data=newData
 localStorage.setItem("wordsData",JSON.stringify(data))
 render()
+}
+
 updateStatus("Synced","success")
 
 }catch{
@@ -193,7 +183,7 @@ updateStatus("Offline","error")
 }
 }
 
-/* PARSE */
+/* ===== PARSE ===== */
 function parseLine(text){
 text=text.trim().replace(/\*\*/g,"")
 
@@ -209,14 +199,16 @@ return {def:p[0].trim(),ex:p.slice(1).join("--").trim()}
 return {def:text,ex:""}
 }
 
-/* SAVE */
+/* ===== SAVE ===== */
 async function save(){
+
 let words=input.value.split("\n").map(x=>x.trim()).filter(Boolean)
 let lines=chat.value.split("\n").map(x=>x.trim()).filter(Boolean)
 
 updateStatus("Saving...","pending")
 
 for(let i=0;i<(words.length||lines.length);i++){
+
 let word=(words[i]||"").toLowerCase()
 let parsed=parseLine(lines[i]||"")
 
@@ -228,6 +220,7 @@ d.ex.toLowerCase()===parsed.ex.toLowerCase()
 )
 
 if(!exists){
+
 data[word].push(parsed)
 localStorage.setItem("wordsData",JSON.stringify(data))
 
@@ -240,6 +233,7 @@ definition:parsed.def,
 example:parsed.ex
 })
 })
+
 }
 }
 
@@ -247,15 +241,15 @@ render()
 updateStatus("Saved","success")
 }
 
-/* READ MORE */
+/* ===== READ MORE ===== */
 function formatText(text){
 if(!text) return ""
 
 if(text.length < 120){
-return `<div>${text}</div>`
+return text
 }
 
-let id = "t"+Math.random().toString(36).substring(2,9)
+let id="t"+Math.random()
 
 return `
 <div>
@@ -264,27 +258,29 @@ return `
 document.getElementById('${id}').style.webkitLineClamp='unset';
 this.remove();
 ">Read more</span>
-</div>`
+</div>
+`
 }
 
-/* RENDER */
+/* ===== RENDER ===== */
 function render(){
+
 let s=search.value.toLowerCase()
 
 let list=Object.keys(data).filter(w=>
-w.includes(s) || data[w].some(d=>d.def.includes(s)||d.ex.includes(s))
+w.includes(s) || (Array.isArray(data[w])?data[w]:[data[w]]).some(d=>d.def.includes(s)||d.ex.includes(s))
 ).reverse()
 
-let html="",i=list.length
+let html="<div class='table-wrap'><table>"
+html+="<tr><th>#</th><th>Word</th><th>Definition</th><th>Example</th><th>Action</th></tr>"
 
-if(viewMode==="table"){
-html=`<div class="table-wrap"><table>
-<tr><th>#</th><th>Word</th><th>Definition</th><th>Example</th><th>Action</th></tr>`
+let i=list.length
 
 list.forEach(w=>{
-let defs=Array.isArray(data[w])?data[w]:[data[w]]
 
-let defHTML=defs.map((d,i)=>`<div><b>${i+1}.</b> ${formatText(d.def)}</div>`).join("")
+let defs = Array.isArray(data[w]) ? data[w] : [data[w]]
+
+let defHTML=defs.map((d,idx)=>`<div><b>${idx+1}.</b> ${formatText(d.def)}</div>`).join("")
 let exHTML=defs.map(d=>`<div style="color:#facc15">${formatText(d.ex)}</div>`).join("")
 
 html+=`<tr>
@@ -298,17 +294,25 @@ html+=`<tr>
 <span class="action-btn" onclick="deleteWord('${w}')">❌</span>
 </td>
 </tr>`
+
 i--
 })
 
 html+="</table></div>"
-}
 
 out.innerHTML=html
 }
 
-function speak(w){speechSynthesis.speak(new SpeechSynthesisUtterance(w))}
-function editWord(w){let d=data[w][0];chat.value=`${w}: ${d.def} -- ${d.ex}`}
+/* ===== HELPERS ===== */
+function speak(w){
+speechSynthesis.speak(new SpeechSynthesisUtterance(w))
+}
+
+function editWord(w){
+let d=(Array.isArray(data[w])?data[w]:[data[w]])[0]
+chat.value=`${w}: ${d.def} -- ${d.ex}`
+}
+
 function deleteWord(w){
 if(!confirm("Delete all definitions?")) return
 delete data[w]
@@ -317,9 +321,18 @@ fetch(API,{method:"POST",body:JSON.stringify({action:"delete",word:w})})
 render()
 }
 
-function clearAll(){input.value="";chat.value="";updateStatus("Ready")}
-function setView(v){viewMode=v;render()}
+function clearAll(){
+input.value=""
+chat.value=""
+updateStatus("Ready")
+}
 
+function setView(v){
+viewMode=v
+render()
+}
+
+/* ===== PROMPT ===== */
 function generate(){
 navigator.clipboard.writeText(`For each term return:
 definition -- example
@@ -328,11 +341,8 @@ Rules:
 window.open("https://chat.openai.com","_blank")
 }
 
+/* ===== INIT ===== */
 load()
-
-if("serviceWorker" in navigator){
-navigator.serviceWorker.register("service-worker.js")
-}
 
 </script>
 
