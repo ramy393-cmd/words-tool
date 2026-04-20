@@ -5,63 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b1220">
 <link rel="manifest" href="manifest.json">
-
 <title>Words Tool 🚀</title>
 
 <style>
 body{margin:0;background:#0b1220;color:#fff;font-family:Arial}
 h2{color:#38bdf8;margin:10px}
-
 .container{display:flex;gap:10px;padding:10px}
 .left{flex:3}
 .right{flex:1;background:#1e293b;padding:10px;border-radius:10px}
 @media(max-width:768px){.container{flex-direction:column}}
-
-textarea,input{
-width:100%;padding:10px;margin:6px 0;
-border:none;border-radius:8px;
-background:#1e293b;color:#fff
-}
-
-button{
-width:100%;padding:10px;margin:6px 0;
-border:none;border-radius:8px;
-background:#38bdf8;color:#000;font-weight:bold
-}
-
-.status{
-display:flex;align-items:center;gap:6px;
-background:#0f172a;padding:8px;border-radius:6px;margin-bottom:10px
-}
-
+textarea,input{width:100%;padding:10px;margin:6px 0;border:none;border-radius:8px;background:#1e293b;color:#fff}
+button{width:100%;padding:10px;margin:6px 0;border:none;border-radius:8px;background:#38bdf8;color:#000;font-weight:bold}
+.status{display:flex;align-items:center;gap:6px;background:#0f172a;padding:8px;border-radius:6px;margin-bottom:10px}
 .dot{width:10px;height:10px;border-radius:50%;background:gray}
-.green{background:#22c55e}
-.yellow{background:#facc15}
-.red{background:#ef4444}
-
-.toggle{display:flex;gap:10px;padding:10px}
-.toggle button{flex:1}
-
+.green{background:#22c55e}.yellow{background:#facc15}.red{background:#ef4444}
+.toggle{display:flex;gap:10px;padding:10px}.toggle button{flex:1}
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse}
 th,td{border:1px solid #334155;padding:8px}
 th{background:#1e293b;color:#38bdf8}
-
-.action-btn{
-padding:4px 6px;margin:0 2px;
-border-radius:6px;background:#38bdf8;color:#000;cursor:pointer
-}
-
-.flashcard{
-background:#1e293b;padding:15px;margin:10px;border-radius:12px
-}
-
+.action-btn{padding:4px 6px;margin:0 2px;border-radius:6px;background:#38bdf8;color:#000;cursor:pointer}
+.flashcard{background:#1e293b;padding:15px;margin:10px;border-radius:12px}
 .flashcard .word{color:#38bdf8;font-weight:bold;font-size:18px}
 .flashcard .def{margin-top:10px;font-size:14px}
-
 .flashcard .actions{display:flex;gap:6px;margin-top:10px}
 .flashcard .actions button{width:32px;height:32px;padding:0}
-
 @media(max-width:768px){.table-wrap{display:none}}
 </style>
 </head>
@@ -107,6 +75,7 @@ let data={}
 let viewMode=window.innerWidth<768?"cards":"table"
 let deferredPrompt;
 
+/* STATUS */
 function updateStatus(msg,type){
 statusText.innerText=msg
 dot.className="dot"
@@ -115,44 +84,38 @@ if(type==="pending") dot.classList.add("yellow")
 if(type==="error") dot.classList.add("red")
 }
 
-/* LOAD */
+/* LOAD (⚡ FAST + SYNC) */
 async function load(){
 
-// ⚡ fast offline load
-if(!navigator.onLine){
+// 🔥 instant load
 let saved = localStorage.getItem("wordsData")
 if(saved){
 data = JSON.parse(saved)
 render()
-updateStatus("Offline (fast)","error")
-return
-}
+updateStatus("Loaded","success")
 }
 
+// 🔄 background sync
 try{
 let r=await fetch(API+"?action=getAll")
 let j=await r.json()
 
-data={}
+let newData={}
 j.data.forEach(i=>{
-data[i.word.toLowerCase()]={def:i.definition,ex:i.example||""}
+newData[i.word.toLowerCase()]={def:i.definition,ex:i.example||""}
 })
 
-localStorage.setItem("wordsData", JSON.stringify(data))
-
+// update only if changed
+if(JSON.stringify(newData)!==JSON.stringify(data)){
+data=newData
+localStorage.setItem("wordsData",JSON.stringify(data))
 render()
-updateStatus("Synced","success")
-}catch{
-
-let saved = localStorage.getItem("wordsData")
-if(saved){
-data = JSON.parse(saved)
-render()
-updateStatus("Offline (cached)","error")
-}else{
-updateStatus("Offline","error")
 }
 
+updateStatus("Synced","success")
+
+}catch{
+updateStatus("Offline","error")
 }
 }
 
@@ -175,72 +138,32 @@ return {def,ex}
 
 /* SAVE */
 async function save(){
-
 let words=input.value.split("\n").map(x=>x.trim()).filter(Boolean)
 let lines=chat.value.split("\n").map(x=>x.trim()).filter(Boolean)
 
 updateStatus("Saving...","pending")
 
 if(words.length>1 && lines.length && lines.length!==words.length){
-updateStatus("Mismatch","error")
-return
+updateStatus("Mismatch","error");return
 }
 
-if(words.length>0){
+for(let i=0;i<(words.length||lines.length);i++){
 
-for(let i=0;i<words.length;i++){
+let word=(words[i]||lines[i].split(" ")[0]).toLowerCase()
+let parsed=parseLine(lines[i]||"")
 
-let word=words[i].toLowerCase()
-let l=lines[i]||""
-let parsed=parseLine(l)
-
-// local
+// local save
 data[word]={def:parsed.def,ex:parsed.ex}
-localStorage.setItem("wordsData", JSON.stringify(data))
+localStorage.setItem("wordsData",JSON.stringify(data))
 
 if(!navigator.onLine){
 let q=JSON.parse(localStorage.getItem("queue")||"[]")
 q.push({word,def:parsed.def,ex:parsed.ex})
-localStorage.setItem("queue", JSON.stringify(q))
+localStorage.setItem("queue",JSON.stringify(q))
 continue
 }
 
 await syncWord(word,parsed.def,parsed.ex)
-}
-
-}else{
-
-for(let l of lines){
-
-let word="",def="",ex=""
-
-if(l.includes(":")){
-let [w,rest]=l.split(":")
-word=w.trim().toLowerCase()
-let parsed=parseLine(rest)
-def=parsed.def
-ex=parsed.ex
-}else{
-let parts=l.split(" ")
-word=parts[0].toLowerCase()
-let parsed=parseLine(parts.slice(1).join(" "))
-def=parsed.def
-ex=parsed.ex
-}
-
-data[word]={def,ex}
-localStorage.setItem("wordsData", JSON.stringify(data))
-
-if(!navigator.onLine){
-let q=JSON.parse(localStorage.getItem("queue")||"[]")
-q.push({word,def,ex})
-localStorage.setItem("queue", JSON.stringify(q))
-continue
-}
-
-await syncWord(word,def,ex)
-}
-
 }
 
 render()
@@ -252,40 +175,27 @@ async function syncWord(word,def,ex){
 try{
 await fetch(API,{
 method:"POST",
-body:JSON.stringify({
-action:data[word]?"update":"save",
-word,
-definition:def,
-example:ex
-})
+body:JSON.stringify({action:"save",word,definition:def,example:ex})
 })
 }catch{}
 }
 
-/* SYNC WHEN ONLINE */
-window.addEventListener("online", async ()=>{
-let q = JSON.parse(localStorage.getItem("queue")||"[]")
-
+/* SYNC BACK */
+window.addEventListener("online",async()=>{
+let q=JSON.parse(localStorage.getItem("queue")||"[]")
 for(let item of q){
 await syncWord(item.word,item.def,item.ex)
 }
-
 localStorage.removeItem("queue")
 updateStatus("Synced","success")
 })
 
 /* DELETE */
 async function deleteWord(word){
-if(!confirm(`Delete "${word}" ?`)) return
-
+if(!confirm("Delete?")) return
 delete data[word]
-localStorage.setItem("wordsData", JSON.stringify(data))
-
-await fetch(API,{
-method:"POST",
-body:JSON.stringify({action:"delete",word})
-})
-
+localStorage.setItem("wordsData",JSON.stringify(data))
+await fetch(API,{method:"POST",body:JSON.stringify({action:"delete",word})})
 render()
 }
 
@@ -293,12 +203,10 @@ render()
 function generate(){
 let words=input.value.trim()
 if(!words){updateStatus("No words","error");return}
-
 let prompt=`For each term, return ONLY:
 definition -- example
 
 ${words}`
-
 navigator.clipboard.writeText(prompt)
 window.open("https://chat.openai.com")
 }
@@ -315,35 +223,26 @@ html=`<div class="table-wrap"><table>
 <tr><th>#</th><th>Word</th><th>Definition</th><th>Example</th><th>Action</th></tr>`
 list.forEach(w=>{
 let d=data[w]
-html+=`<tr>
-<td>${i}</td>
-<td>${w}</td>
-<td>${d.def}</td>
-<td>${d.ex}</td>
+html+=`<tr><td>${i}</td><td>${w}</td><td>${d.def}</td><td>${d.ex}</td>
 <td>
 <span class="action-btn" onclick="speak('${w}')">🔊</span>
 <span class="action-btn" onclick="editWord('${w}')">✏️</span>
 <span class="action-btn" onclick="deleteWord('${w}')">❌</span>
-</td>
-</tr>`
-i--
-})
+</td></tr>`
+i--})
 html+="</table></div>"
 }else{
 list.forEach(w=>{
 let d=data[w]
 html+=`<div class="flashcard">
 <div class="word">${i}. ${w}</div>
-<div class="def">
-${d.def}<br>
-<span style="color:#facc15">${d.ex}</span>
+<div class="def">${d.def}<br><span style="color:#facc15">${d.ex}</span>
 <div class="actions">
 <button onclick="speak('${w}')">🔊</button>
 <button onclick="editWord('${w}')">✏️</button>
 <button onclick="deleteWord('${w}')">❌</button>
 </div></div></div>`
-i--
-})
+i--})
 }
 
 out.innerHTML=html
@@ -354,26 +253,15 @@ function editWord(word){let i=data[word];chat.value=`${word}: ${i.def} -- ${i.ex
 function clearAll(){input.value="";chat.value="";updateStatus("Ready")}
 function setView(v){viewMode=v;render()}
 
-/* INSTALL BUTTON */
-window.addEventListener("beforeinstallprompt", (e) => {
-e.preventDefault();
-deferredPrompt = e;
-installBtn.style.display="block";
-});
+/* INSTALL */
+window.addEventListener("beforeinstallprompt",e=>{
+e.preventDefault();deferredPrompt=e;installBtn.style.display="block";
+})
+installBtn.onclick=async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();installBtn.style.display="none";}
 
-installBtn.onclick = async () => {
-if(!deferredPrompt) return;
-deferredPrompt.prompt();
-deferredPrompt=null;
-installBtn.style.display="none";
-};
-
+/* INIT */
 load()
-
-/* SERVICE WORKER */
-if("serviceWorker" in navigator){
-navigator.serviceWorker.register("service-worker.js")
-}
+if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worker.js")}
 
 </script>
 
