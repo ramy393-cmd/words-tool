@@ -1,4 +1,4 @@
-const CACHE="words-tool-final-pro";
+const CACHE="words-tool-final";
 
 self.addEventListener("install",e=>{
 self.skipWaiting();

@@ -33,8 +33,10 @@ display:flex;align-items:center;gap:6px;
 background:#0f172a;padding:8px;border-radius:6px;margin-bottom:10px
 }
 
-.dot{width:10px;height:10px;border-radius:50%;background:gray}
-.green{background:#22c55e}.yellow{background:#facc15}.red{background:#ef4444}
+.dot{width:10px;height:10px;border-radius:50%}
+.green{background:#22c55e}
+.yellow{background:#facc15}
+.red{background:#ef4444}
 
 .toggle{display:flex;gap:10px;padding:10px}
 .toggle button{flex:1}
@@ -44,23 +46,10 @@ table{width:100%;border-collapse:collapse}
 th,td{border:1px solid #334155;padding:8px}
 th{background:#1e293b;color:#38bdf8}
 
-/* prevent breaking */
-td:nth-child(1), td:nth-child(2){
-white-space:nowrap;
-}
+td:nth-child(1), td:nth-child(2){white-space:nowrap}
+td:nth-child(3), td:nth-child(4){word-break:break-word}
 
-/* text wrap only for content */
-td:nth-child(3), td:nth-child(4){
-word-break:break-word;
-}
-
-/* actions */
-.actions{
-display:flex;
-gap:6px;
-justify-content:center;
-flex-wrap:nowrap;
-}
+.actions{display:flex;gap:6px;justify-content:center;flex-wrap:nowrap}
 
 .action-btn{
 padding:4px 6px;
@@ -70,7 +59,6 @@ color:#000;
 cursor:pointer
 }
 
-/* read more */
 .clamp{
 display:-webkit-box;
 -webkit-line-clamp:2;
@@ -84,7 +72,6 @@ cursor:pointer;
 font-size:12px;
 }
 
-/* cards */
 .flashcard{
 background:#1e293b;padding:15px;margin:10px;border-radius:12px
 }
@@ -92,11 +79,7 @@ background:#1e293b;padding:15px;margin:10px;border-radius:12px
 .flashcard .word{color:#38bdf8;font-weight:bold;font-size:18px}
 .flashcard .def{margin-top:10px;font-size:14px}
 
-.flashcard .actions{
-display:flex;
-gap:6px;
-margin-top:10px
-}
+.flashcard .actions{display:flex;gap:6px;margin-top:10px}
 
 .flashcard .actions button{
 width:32px;height:32px;padding:0
@@ -147,7 +130,6 @@ const API="https://script.google.com/macros/s/AKfycbwQHi9XYwqzFbQHHfqCf8rv2aeCdQ
 
 let data={}
 let viewMode=window.innerWidth<768?"cards":"table"
-let deferredPrompt;
 
 /* STATUS */
 function updateStatus(msg,type){
@@ -158,10 +140,15 @@ if(type==="pending") dot.classList.add("yellow")
 if(type==="error") dot.classList.add("red")
 }
 
-/* LOAD + GROUP */
+/* LOAD */
 async function load(){
+
 let saved=localStorage.getItem("wordsData")
-if(saved){data=JSON.parse(saved);render();updateStatus("Loaded","success")}
+if(saved){
+data=JSON.parse(saved)
+render()
+updateStatus("Loaded","success")
+}
 
 try{
 let r=await fetch(API+"?action=getAll")
@@ -171,17 +158,27 @@ let newData={}
 
 j.data.forEach(i=>{
 let w=i.word.toLowerCase()
+
 if(!newData[w]) newData[w]=[]
 
+let exists=newData[w].some(d=>
+d.def===i.definition && d.ex===i.example
+)
+
+if(!exists){
 newData[w].push({
 def:i.definition,
 ex:i.example||""
 })
+}
 })
 
+if(JSON.stringify(newData)!==JSON.stringify(data)){
 data=newData
 localStorage.setItem("wordsData",JSON.stringify(data))
 render()
+}
+
 updateStatus("Synced","success")
 
 }catch{
@@ -210,7 +207,7 @@ return {def:p[0].trim(),ex:p.slice(1).join("|").trim()}
 return {def:text,ex:""}
 }
 
-/* SAVE (append) */
+/* SAVE */
 async function save(){
 
 let words=input.value.split("\n").map(x=>x.trim()).filter(Boolean)
@@ -225,14 +222,26 @@ let parsed=parseLine(lines[i]||"")
 
 if(!data[word]) data[word]=[]
 
-let exists=data[word].some(d=>d.def===parsed.def && d.ex===parsed.ex)
+let exists=data[word].some(d=>
+d.def.trim().toLowerCase()===parsed.def.trim().toLowerCase() &&
+d.ex.trim().toLowerCase()===parsed.ex.trim().toLowerCase()
+)
 
 if(!exists){
+
 data[word].push(parsed)
 localStorage.setItem("wordsData",JSON.stringify(data))
-await fetch(API,{method:"POST",body:JSON.stringify({
-action:"save",word,definition:parsed.def,example:parsed.ex
-})})
+
+await fetch(API,{
+method:"POST",
+body:JSON.stringify({
+action:"save",
+word,
+definition:parsed.def,
+example:parsed.ex
+})
+})
+
 }
 }
 
@@ -240,7 +249,7 @@ render()
 updateStatus("Saved","success")
 }
 
-/* FORMAT TEXT */
+/* FORMAT */
 function formatText(text){
 if(!text) return ""
 if(text.length<120) return text
@@ -254,6 +263,7 @@ return `
 
 /* RENDER */
 function render(){
+
 let s=search.value.toLowerCase()
 
 let list=Object.keys(data).filter(w=>
@@ -263,10 +273,12 @@ w.includes(s) || data[w].some(d=>d.def.includes(s)||d.ex.includes(s))
 let html="",i=list.length
 
 if(viewMode==="table"){
+
 html=`<div class="table-wrap"><table>
 <tr><th>#</th><th>Word</th><th>Definition</th><th>Example</th><th>Action</th></tr>`
 
 list.forEach(w=>{
+
 let defs=data[w]
 
 let defHTML=defs.map((d,i)=>`<div><b>${i+1}.</b> ${formatText(d.def)}</div>`).join("")
@@ -283,6 +295,7 @@ html+=`<tr>
 <span class="action-btn" onclick="deleteWord('${w}')">❌</span>
 </td>
 </tr>`
+
 i--
 })
 
@@ -291,6 +304,7 @@ html+="</table></div>"
 }else{
 
 list.forEach(w=>{
+
 let defs=data[w]
 
 let block=defs.map((d,i)=>`
@@ -307,6 +321,7 @@ html+=`<div class="flashcard">
 <button onclick="editWord('${w}')">✏️</button>
 <button onclick="deleteWord('${w}')">❌</button>
 </div></div></div>`
+
 i--
 })
 
@@ -332,12 +347,16 @@ function setView(v){viewMode=v;render()}
 /* PROMPT */
 function generate(){
 let words=input.value.trim()
-navigator.clipboard.writeText(`For each term return:
+
+let prompt=`For each term return:
+
 definition -- example
 
 Rules:
 - Do NOT repeat the word
-- No formatting`)
+- No formatting`
+
+navigator.clipboard.writeText(prompt+"\n\n"+words)
 window.open("https://chat.openai.com","_blank")
 }
 
