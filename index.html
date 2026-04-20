@@ -12,6 +12,7 @@ h2{color:#38bdf8;margin:10px}
 .container{display:flex;gap:10px;padding:10px}
 .left{flex:3}
 .right{flex:1;background:#1e293b;padding:10px;border-radius:10px}
+@media(max-width:768px){.container{flex-direction:column}}
 
 textarea,input{
 width:100%;padding:10px;margin:6px 0;
@@ -25,7 +26,8 @@ border:none;border-radius:8px;
 background:#38bdf8;color:#000;font-weight:bold
 }
 
-/* table */
+/* TABLE */
+.table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse}
 th,td{border:1px solid #334155;padding:8px}
 th{background:#1e293b;color:#38bdf8}
@@ -35,7 +37,7 @@ max-width:350px;
 vertical-align:top;
 }
 
-/* actions */
+/* ACTIONS */
 .actions{
 display:flex;
 gap:6px;
@@ -50,7 +52,7 @@ cursor:pointer;
 color:#000;
 }
 
-/* read more */
+/* READ MORE */
 .clamp{
 display:-webkit-box;
 -webkit-line-clamp:2;
@@ -66,13 +68,36 @@ display:block;
 margin-top:4px;
 }
 
-/* collapse */
+/* COLLAPSE */
 .toggle-more{
 color:#38bdf8;
 cursor:pointer;
 font-size:12px;
 margin-top:4px;
 display:block;
+}
+
+/* CARDS */
+.cards{display:none}
+
+.card{
+background:#1e293b;
+margin:10px;
+padding:15px;
+border-radius:10px;
+}
+
+.card .word{
+color:#38bdf8;
+font-weight:bold;
+font-size:18px;
+margin-bottom:10px;
+}
+
+/* MOBILE */
+@media(max-width:768px){
+.table-wrap{display:none}
+.cards{display:block}
 }
 </style>
 </head>
@@ -102,15 +127,13 @@ display:block;
 <script>
 
 const API="PUT_YOUR_API_HERE";
-
 let data={}
 
-/* ===== LOAD ===== */
+/* LOAD */
 async function load(){
 let saved=localStorage.getItem("wordsData")
 if(saved){
 data=JSON.parse(saved)
-render()
 }
 
 try{
@@ -121,7 +144,6 @@ let newData={}
 
 j.data.forEach(i=>{
 let w=i.word.toLowerCase()
-
 if(!newData[w]) newData[w]=[]
 
 let exists=newData[w].some(d=>d.def===i.definition && d.ex===i.example)
@@ -131,16 +153,15 @@ newData[w].push({def:i.definition,ex:i.example||""})
 }
 })
 
-if(Object.keys(newData).length>0){
 data=newData
 localStorage.setItem("wordsData",JSON.stringify(data))
+
+}catch{}
+
 render()
 }
 
-}catch{}
-}
-
-/* ===== PARSE ===== */
+/* PARSE */
 function parseLine(text){
 if(text.includes("--")){
 let p=text.split("--")
@@ -149,7 +170,7 @@ return {def:p[0].trim(),ex:p.slice(1).join("--").trim()}
 return {def:text,ex:""}
 }
 
-/* ===== SAVE ===== */
+/* SAVE */
 async function save(){
 let words=input.value.split("\n").filter(Boolean)
 let lines=chat.value.split("\n").filter(Boolean)
@@ -181,11 +202,10 @@ example:p.ex
 render()
 }
 
-/* ===== READ MORE ===== */
+/* READ MORE */
 function formatText(text){
 if(!text) return ""
-
-if(text.length < 120) return text
+if(text.length<120) return text
 
 let id="t"+Math.random()
 
@@ -196,22 +216,19 @@ return `
 document.getElementById('${id}').style.webkitLineClamp='unset';
 this.remove();
 ">Read more</span>
-</div>
-`
+</div>`
 }
 
-/* ===== COLLAPSE ===== */
-function renderDefs(w, defs){
+/* COLLAPSE */
+function renderDefs(defs){
+let arr = Array.isArray(defs)?defs:[defs]
 
+let first = `<div>${formatText(arr[0].def)}</div>`
+
+if(arr.length===1) return first
+
+let rest = arr.slice(1).map(d=>`<div>${formatText(d.def)}</div>`).join("")
 let id="d"+Math.random()
-
-let defsArr = Array.isArray(defs)?defs:[defs]
-
-let first = `<div>${formatText(defsArr[0].def)}</div>`
-
-if(defsArr.length===1) return first
-
-let rest = defsArr.slice(1).map(d=>`<div>${formatText(d.def)}</div>`).join("")
 
 return `
 <div>
@@ -226,33 +243,30 @@ this.innerText='Hide'
 el.style.display='none'
 this.innerText='Show all'
 }
-">Show all (${defsArr.length})</span>
-</div>
-`
+">Show all (${arr.length})</span>
+</div>`
 }
 
-/* ===== RENDER ===== */
+/* RENDER */
 function render(){
 
 let s=search.value.toLowerCase()
+let list=Object.keys(data).filter(w=>w.includes(s)).reverse()
 
-let list=Object.keys(data).filter(w=>
-w.includes(s)
-).reverse()
+let table="<div class='table-wrap'><table>"
+table+="<tr><th>#</th><th>Word</th><th>Definition</th><th>Example</th><th>Action</th></tr>"
 
-let html="<table>"
-html+="<tr><th>#</th><th>Word</th><th>Definition</th><th>Example</th><th>Action</th></tr>"
+let cards="<div class='cards'>"
 
 let i=list.length
 
 list.forEach(w=>{
-
 let defs = Array.isArray(data[w])?data[w]:[data[w]]
 
-let defHTML = renderDefs(w, defs)
+let defHTML = renderDefs(defs)
 let exHTML = defs.map(d=>`<div style="color:#facc15">${formatText(d.ex)}</div>`).join("")
 
-html+=`
+table+=`
 <tr>
 <td>${i}</td>
 <td>${w}</td>
@@ -266,12 +280,21 @@ html+=`
 </tr>
 `
 
+cards+=`
+<div class="card">
+<div class="word">${w}</div>
+<div>${defHTML}</div>
+<div style="color:#facc15">${exHTML}</div>
+</div>
+`
+
 i--
 })
 
-html+="</table>"
+table+="</table></div>"
+cards+="</div>"
 
-out.innerHTML=html
+out.innerHTML = table + cards
 }
 
 function clearAll(){
