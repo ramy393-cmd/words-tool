@@ -1,7 +1,8 @@
 {
   "name": "Words Tool",
   "short_name": "Words",
-  "start_url": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#0b1220",
   "theme_color": "#0b1220",

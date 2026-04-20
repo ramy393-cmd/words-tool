@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b1220">
 <link rel="manifest" href="manifest.json">
+
 <title>Words Tool 🚀</title>
 
 <style>
@@ -84,10 +85,9 @@ if(type==="pending") dot.classList.add("yellow")
 if(type==="error") dot.classList.add("red")
 }
 
-/* LOAD (⚡ FAST + SYNC) */
+/* LOAD */
 async function load(){
 
-// 🔥 instant load
 let saved = localStorage.getItem("wordsData")
 if(saved){
 data = JSON.parse(saved)
@@ -95,7 +95,6 @@ render()
 updateStatus("Loaded","success")
 }
 
-// 🔄 background sync
 try{
 let r=await fetch(API+"?action=getAll")
 let j=await r.json()
@@ -105,7 +104,6 @@ j.data.forEach(i=>{
 newData[i.word.toLowerCase()]={def:i.definition,ex:i.example||""}
 })
 
-// update only if changed
 if(JSON.stringify(newData)!==JSON.stringify(data)){
 data=newData
 localStorage.setItem("wordsData",JSON.stringify(data))
@@ -152,7 +150,6 @@ for(let i=0;i<(words.length||lines.length);i++){
 let word=(words[i]||lines[i].split(" ")[0]).toLowerCase()
 let parsed=parseLine(lines[i]||"")
 
-// local save
 data[word]={def:parsed.def,ex:parsed.ex}
 localStorage.setItem("wordsData",JSON.stringify(data))
 
@@ -163,28 +160,18 @@ localStorage.setItem("queue",JSON.stringify(q))
 continue
 }
 
-await syncWord(word,parsed.def,parsed.ex)
+await fetch(API,{method:"POST",body:JSON.stringify({action:"save",word,definition:parsed.def,example:parsed.ex})})
 }
 
 render()
 updateStatus("Saved","success")
 }
 
-/* SYNC */
-async function syncWord(word,def,ex){
-try{
-await fetch(API,{
-method:"POST",
-body:JSON.stringify({action:"save",word,definition:def,example:ex})
-})
-}catch{}
-}
-
 /* SYNC BACK */
 window.addEventListener("online",async()=>{
 let q=JSON.parse(localStorage.getItem("queue")||"[]")
 for(let item of q){
-await syncWord(item.word,item.def,item.ex)
+await fetch(API,{method:"POST",body:JSON.stringify({action:"save",word:item.word,definition:item.def,example:item.ex})})
 }
 localStorage.removeItem("queue")
 updateStatus("Synced","success")
@@ -259,9 +246,11 @@ e.preventDefault();deferredPrompt=e;installBtn.style.display="block";
 })
 installBtn.onclick=async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();installBtn.style.display="none";}
 
-/* INIT */
 load()
-if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worker.js")}
+
+if("serviceWorker" in navigator){
+navigator.serviceWorker.register("service-worker.js")
+}
 
 </script>
 

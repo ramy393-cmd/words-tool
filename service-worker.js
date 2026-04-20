@@ -1,8 +1,8 @@
-const CACHE="words-tool-final";
+const CACHE="words-tool-v-final";
 
 self.addEventListener("install",e=>{
 self.skipWaiting();
-e.waitUntil(caches.open(CACHE).then(c=>c.addAll(["/","/index.html","/manifest.json"])))
+e.waitUntil(caches.open(CACHE).then(c=>c.addAll(["./","./index.html","./manifest.json"])))
 });
 
 self.addEventListener("activate",e=>{
