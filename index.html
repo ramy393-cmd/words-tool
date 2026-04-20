@@ -68,12 +68,14 @@ th{background:#1e293b;color:#38bdf8}
 </div>
 
 <script>
+
 const API="https://script.google.com/macros/s/AKfycbwQHi9XYwqzFbQHHfqCf8rv2aeCdQ6ejK3w93zdCPJpHl46nl_CrQCRtZ60i0vk-3c/exec";
 
 let data={}
 let viewMode=window.innerWidth<768?"cards":"table"
 let deferredPrompt;
 
+/* STATUS */
 function updateStatus(msg,type){
 statusText.innerText=msg
 dot.className="dot"
@@ -82,6 +84,7 @@ if(type==="pending") dot.classList.add("yellow")
 if(type==="error") dot.classList.add("red")
 }
 
+/* LOAD */
 async function load(){
 let saved=localStorage.getItem("wordsData")
 if(saved){data=JSON.parse(saved);render();updateStatus("Loaded","success")}
@@ -89,36 +92,60 @@ try{
 let r=await fetch(API+"?action=getAll")
 let j=await r.json()
 let newData={}
-j.data.forEach(i=>{newData[i.word.toLowerCase()]={def:i.definition,ex:i.example||""}})
+j.data.forEach(i=>{
+newData[i.word.toLowerCase()]={def:i.definition,ex:i.example||""}
+})
 if(JSON.stringify(newData)!==JSON.stringify(data)){
 data=newData
 localStorage.setItem("wordsData",JSON.stringify(data))
 render()
 }
 updateStatus("Synced","success")
-}catch{updateStatus("Offline","error")}
+}catch{
+updateStatus("Offline","error")
+}
 }
 
-/* FINAL PARSER */
+/* 🔥 SMART PARSER */
 function parseLine(text){
 text=text.trim()
+
+// remove markdown
+text=text.replace(/\*\*/g,"")
+
+// example label
+if(text.toLowerCase().includes("example")){
+let parts=text.split(/example\s*--/i)
+let def=parts[0].replace(/--/,"").trim()
+let ex=(parts[1]||"").trim()
+return {def,ex}
+}
+
+// example only
 if(text.startsWith("--")){
 return {def:"",ex:text.replace(/^--+/,"").trim()}
 }
+
+// def + ex
 if(text.includes("--")){
 let p=text.split("--")
 return {def:p[0].trim(),ex:p.slice(1).join("--").trim()}
 }
+
+// fallback |
 if(text.includes("|")){
 let p=text.split("|")
 return {def:p[0].trim(),ex:p.slice(1).join("|").trim()}
 }
+
 return {def:text,ex:""}
 }
 
+/* SAVE */
 async function save(){
 let words=input.value.split("\n").map(x=>x.trim()).filter(Boolean)
 let lines=chat.value.split("\n").map(x=>x.trim()).filter(Boolean)
+
 updateStatus("Saving...","pending")
 
 if(words.length>1 && lines.length && lines.length!==words.length){
@@ -149,50 +176,77 @@ render()
 updateStatus("Saved","success")
 }
 
+/* SYNC */
 window.addEventListener("online",async()=>{
 let q=JSON.parse(localStorage.getItem("queue")||"[]")
-for(let i of q){
-await fetch(API,{method:"POST",body:JSON.stringify({action:"save",word:i.word,definition:i.def,example:i.ex})})
+for(let item of q){
+await fetch(API,{method:"POST",body:JSON.stringify({action:"save",word:item.word,definition:item.def,example:item.ex})})
 }
 localStorage.removeItem("queue")
 updateStatus("Synced","success")
 })
 
+/* DELETE */
 async function deleteWord(word){
-if(!confirm("Delete?"))return
+if(!confirm("Delete?")) return
 delete data[word]
 localStorage.setItem("wordsData",JSON.stringify(data))
 await fetch(API,{method:"POST",body:JSON.stringify({action:"delete",word})})
 render()
 }
 
+/* 🔥 GENERATE PROMPT (UPDATED) */
 function generate(){
-let w=input.value.trim()
-if(!w){updateStatus("No words","error");return}
-navigator.clipboard.writeText(`For each term return:\ndefinition -- example\n\n${w}`)
+let words=input.value.trim()
+if(!words){updateStatus("No words","error");return}
+
+let prompt=`For each term, return ONLY:
+
+definition -- example
+
+Rules:
+- Do NOT repeat the word
+- Do NOT use labels (word, example)
+- No bold or formatting
+- Plain text only
+
+${words}`
+
+navigator.clipboard.writeText(prompt)
 window.open("https://chat.openai.com")
 }
 
+/* RENDER */
 function render(){
 let s=search.value.toLowerCase()
 let list=Object.keys(data).filter(w=>w.includes(s)||data[w].def.includes(s)).reverse()
+
 let html="",i=list.length
 
 if(viewMode==="table"){
-html=`<div class="table-wrap"><table><tr><th>#</th><th>Word</th><th>Definition</th><th>Example</th><th>Action</th></tr>`
+html=`<div class="table-wrap"><table>
+<tr><th>#</th><th>Word</th><th>Definition</th><th>Example</th><th>Action</th></tr>`
 list.forEach(w=>{
 let d=data[w]
-html+=`<tr><td>${i}</td><td>${w}</td><td>${d.def}</td><td>${d.ex}</td>
-<td><span class="action-btn" onclick="speak('${w}')">🔊</span>
+html+=`<tr>
+<td>${i}</td>
+<td>${w}</td>
+<td>${d.def}</td>
+<td>${d.ex}</td>
+<td>
+<span class="action-btn" onclick="speak('${w}')">🔊</span>
 <span class="action-btn" onclick="editWord('${w}')">✏️</span>
-<span class="action-btn" onclick="deleteWord('${w}')">❌</span></td></tr>`
+<span class="action-btn" onclick="deleteWord('${w}')">❌</span>
+</td>
+</tr>`
 i--
 })
 html+="</table></div>"
 }else{
 list.forEach(w=>{
 let d=data[w]
-html+=`<div class="flashcard"><div class="word">${i}. ${w}</div>
+html+=`<div class="flashcard">
+<div class="word">${i}. ${w}</div>
 <div class="def">${d.def}<br><span style="color:#facc15">${d.ex}</span>
 <div class="actions">
 <button onclick="speak('${w}')">🔊</button>
@@ -202,21 +256,32 @@ html+=`<div class="flashcard"><div class="word">${i}. ${w}</div>
 i--
 })
 }
+
 out.innerHTML=html
 }
 
+/* helpers */
 function speak(w){speechSynthesis.speak(new SpeechSynthesisUtterance(w))}
 function editWord(w){let i=data[w];chat.value=`${w}: ${i.def} -- ${i.ex}`}
 function clearAll(){input.value="";chat.value="";updateStatus("Ready")}
 function setView(v){viewMode=v;render()}
 
+/* install */
 window.addEventListener("beforeinstallprompt",e=>{
 e.preventDefault();deferredPrompt=e;installBtn.style.display="block"
 })
-installBtn.onclick=async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();installBtn.style.display="none"}
+installBtn.onclick=async()=>{
+if(!deferredPrompt)return
+deferredPrompt.prompt()
+installBtn.style.display="none"
+}
 
+/* init */
 load()
-if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worker.js")}
+if("serviceWorker" in navigator){
+navigator.serviceWorker.register("service-worker.js")
+}
+
 </script>
 
 </body>

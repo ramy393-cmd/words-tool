@@ -1,4 +1,4 @@
-const CACHE="words-tool-final";
+const CACHE="words-tool-final-v2";
 
 self.addEventListener("install",e=>{
 self.skipWaiting();
@@ -25,8 +25,5 @@ headers:{"Content-Type":"application/json"}
 );
 return;
 }
-
-e.respondWith(
-caches.match(e.request).then(r=>r||fetch(e.request))
-);
+e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));
 });
