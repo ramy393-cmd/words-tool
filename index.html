@@ -4,9 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<link rel="preconnect" href="https://chat.openai.com">
-<link rel="dns-prefetch" href="https://chat.openai.com">
-
 <title>Words Tool</title>
 
 <style>
@@ -35,7 +32,7 @@ padding:14px 20px;border-bottom:1px solid var(--border);background:#0a1324
 .online{background:#064e3b;color:#34d399}
 .offline{background:#450a0a;color:#f87171}
 .syncing{background:#422006;color:#facc15}
-.local{background:#1e293b;color:#94a3b8}
+.local{background:#422006;color:#facc15}
 
 /* LAYOUT */
 .container{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 50px)}
@@ -151,11 +148,41 @@ let data={}
 let queue=JSON.parse(localStorage.getItem("queue")||"[]")
 let view="table"
 let chatTab=null
+let retryTimer=null
 
 function setStatus(type,text){
 let s=document.getElementById("status")
 s.className="status "+type
 s.innerText=text
+}
+
+/* RETRY SYSTEM */
+function startRetry(){
+if(retryTimer) return
+
+retryTimer=setInterval(async()=>{
+if(!navigator.onLine){
+setStatus("offline","Offline")
+return
+}
+
+try{
+let r=await fetch(API+"?action=getAll")
+
+if(r.ok){
+setStatus("online","Online")
+clearInterval(retryTimer)
+retryTimer=null
+load()
+}else{
+setStatus("local","Retrying...")
+}
+
+}catch{
+setStatus("local","Retrying...")
+}
+
+},5000)
 }
 
 /* PROMPT */
@@ -169,20 +196,14 @@ Rules:
 - One line per word
 - Do not add numbering
 - Do not repeat the word
-- Do not add extra text
 
 ${words}`
 }
 
-function copyPrompt(text){
-navigator.clipboard.writeText(text).then(()=>{
-setStatus("local","Prompt copied")
-})
-}
-
 function generate(){
 let prompt=buildPrompt()
-copyPrompt(prompt)
+navigator.clipboard.writeText(prompt)
+
 if(!chatTab || chatTab.closed){
 chatTab=window.open("https://chat.openai.com","_blank")
 }else{
@@ -206,6 +227,7 @@ return {def:t.trim(),ex:""}
 /* SAVE */
 async function save(){
 setStatus("syncing","Syncing...")
+
 let w=input.value.split("\n").filter(Boolean)
 let l=chat.value.split("\n").filter(Boolean)
 
@@ -307,6 +329,9 @@ setStatus("syncing","Syncing...")
 
 try{
 let r=await fetch(API+"?action=getAll")
+
+if(!r.ok) throw new Error("API failed")
+
 let j=await r.json()
 
 if(j?.data){
@@ -321,9 +346,16 @@ data[w].push(obj)
 }
 })
 }
+
 setStatus("online","Online")
-}catch{
+
+}catch(e){
+if(navigator.onLine){
+setStatus("local","API Error")
+startRetry()
+}else{
 setStatus("offline","Offline")
+}
 }
 
 syncQueue()
