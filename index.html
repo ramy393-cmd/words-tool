@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-
 <title>Words Tool</title>
 
 <style>
@@ -113,7 +112,7 @@ border:1px solid var(--border);display:flex;flex-direction:column;gap:8px
 <div class="header">
 <div class="logo">Words Tool</div>
 <div class="header-right">
-<div id="status" class="status offline">Offline</div>
+<div id="status" class="status syncing">Starting...</div>
 <div>Words: <span id="count">0</span></div>
 </div>
 </div>
@@ -156,33 +155,10 @@ s.className="status "+type
 s.innerText=text
 }
 
-/* RETRY SYSTEM */
+/* RETRY */
 function startRetry(){
 if(retryTimer) return
-
-retryTimer=setInterval(async()=>{
-if(!navigator.onLine){
-setStatus("offline","Offline")
-return
-}
-
-try{
-let r=await fetch(API+"?action=getAll")
-
-if(r.ok){
-setStatus("online","Online")
-clearInterval(retryTimer)
-retryTimer=null
-load()
-}else{
-setStatus("local","Retrying...")
-}
-
-}catch{
-setStatus("local","Retrying...")
-}
-
-},5000)
+retryTimer=setInterval(load,5000)
 }
 
 /* PROMPT */
@@ -196,13 +172,18 @@ Rules:
 - One line per word
 - Do not add numbering
 - Do not repeat the word
+- Use "|" exactly as separator
 
 ${words}`
 }
 
-function generate(){
+async function generate(){
 let prompt=buildPrompt()
-navigator.clipboard.writeText(prompt)
+try{
+await navigator.clipboard.writeText(prompt)
+}catch{
+alert("Copy failed")
+}
 
 if(!chatTab || chatTab.closed){
 chatTab=window.open("https://chat.openai.com","_blank")
@@ -319,18 +300,11 @@ async function load(){
 let saved=localStorage.getItem("words")
 if(saved) data=JSON.parse(saved)
 
-if(!navigator.onLine){
-setStatus("offline","Offline")
-render()
-return
-}
-
 setStatus("syncing","Syncing...")
 
 try{
-let r=await fetch(API+"?action=getAll")
-
-if(!r.ok) throw new Error("API failed")
+let r=await fetch(API+"?action=getAll",{cache:"no-store"})
+if(!r.ok) throw new Error()
 
 let j=await r.json()
 
@@ -338,9 +312,7 @@ if(j?.data){
 j.data.forEach(i=>{
 let w=i.word.toLowerCase()
 if(!data[w]) data[w]=[]
-
 let obj={def:i.definition||"",ex:i.example||""}
-
 if(!data[w].some(d=>d.def===obj.def && d.ex===obj.ex)){
 data[w].push(obj)
 }
@@ -349,13 +321,9 @@ data[w].push(obj)
 
 setStatus("online","Online")
 
-}catch(e){
-if(navigator.onLine){
+}catch{
 setStatus("local","API Error")
 startRetry()
-}else{
-setStatus("offline","Offline")
-}
 }
 
 syncQueue()
@@ -448,12 +416,8 @@ localStorage.setItem("words",JSON.stringify(data))
 render()
 }
 
-/* UI */
 let t
-search.oninput=()=>{
-clearTimeout(t)
-t=setTimeout(render,200)
-}
+search.oninput=()=>{clearTimeout(t);t=setTimeout(render,200)}
 
 function setView(v){
 view=v
