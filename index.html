@@ -45,13 +45,10 @@ button{padding:10px;border:none;border-radius:8px;cursor:pointer;font-weight:600
 
 /* CONTENT */
 .content{overflow:auto;padding:14px}
-
-/* TABLE */
 table{width:100%;border-collapse:collapse}
 th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
 th{color:var(--muted);font-size:12px}
 
-/* CARDS */
 .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 @media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.cards{grid-template-columns:1fr}}
@@ -108,7 +105,7 @@ th{color:var(--muted);font-size:12px}
 </div>
 
 <script>
-const API = "https://script.google.com/macros/s/AKfycbyDiJ2mRyFAlkzGEPAUROtvMXs27mCSJvT3m-Z-3tgHpmKUa-PpstZkk4Do6qdvQds/exec"; // ← حط لينك الـ GAS
+const API = "https://script.google.com/macros/s/AKfycbyDiJ2mRyFAlkzGEPAUROtvMXs27mCSJvT3m-Z-3tgHpmKUa-PpstZkk4Do6qdvQds/exec";
 
 let data = {};
 let queue = JSON.parse(localStorage.getItem("queue") || "[]");
@@ -119,308 +116,151 @@ let chatTab = null;
 
 const $ = id => document.getElementById(id);
 
-/* utils */
 function escapeHTML(s){return (s||"").replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function safeId(s){return "id_"+encodeURIComponent(s).replace(/%/g,'')}
-function getClampLines(){const w=window.innerWidth; return w<500?3:2}
-function setStatus(t,txt){const el=$("status"); el.className="status "+t; el.textContent=txt}
-function startRetry(){ if(retryTimer) return; retryTimer=setInterval(load,5000) }
+function getClampLines(){return window.innerWidth<500?3:2}
+function setStatus(t,txt){$("status").className="status "+t;$("status").textContent=txt}
+function startRetry(){if(retryTimer)return;retryTimer=setInterval(load,5000)}
 
-/* prompt */
-function buildPrompt(){
-  const words = $("input").value.trim();
-  if(!words) return "Give definitions and examples";
-  return `For each word return EXACTLY in this format:
-definition | example
-
-Rules:
-- One line per word
-- Do not add numbering
-- Do not repeat the word
-- Use "|" exactly as separator
-
-${words}`;
-}
-async function generate(){
-  const prompt = buildPrompt();
-  try{ await navigator.clipboard.writeText(prompt) }catch{}
-  if(!chatTab || chatTab.closed){
-    chatTab = window.open("https://chat.openai.com","_blank");
-  }else{
-    chatTab.focus();
-  }
-}
-
-/* parse */
 function parse(t){
-  if(!t) return {def:"",ex:""};
-  if(t.includes("|")){ const [d,...r]=t.split("|"); return {def:d.trim(),ex:r.join("|").trim()} }
-  if(t.includes("--")){ const [d,...r]=t.split("--"); return {def:d.trim(),ex:r.join("--").trim()} }
-  return {def:t.trim(),ex:""};
+if(!t)return{def:"",ex:""}
+if(t.includes("|")){let[d,...r]=t.split("|");return{def:d.trim(),ex:r.join("|").trim()}}
+if(t.includes("--")){let[d,...r]=t.split("--");return{def:d.trim(),ex:r.join("--").trim()}}
+return{def:t.trim(),ex:""}
 }
 
-/* save (batch + delta + fallback) */
 async function save(){
-  setStatus("syncing","Syncing...");
-  const w = $("input").value.split("\n").filter(Boolean);
-  const l = $("chat").value.split("\n").filter(Boolean);
-  let batch = [];
-  let changed = false;
+setStatus("syncing","Syncing...")
+let w=$("input").value.split("\n").filter(Boolean)
+let l=$("chat").value.split("\n").filter(Boolean)
+let batch=[]
 
-  for(let i=0;i<w.length;i++){
-    const word = w[i].toLowerCase().trim();
-    if(!word) continue;
-
-    const p = parse(l[i]||"");
-    if(!data[word]) data[word] = [];
-
-    if(!data[word].some(d=>d.def===p.def && d.ex===p.ex)){
-      data[word].push(p);
-      changed = true;
-
-      const item = {word,definition:p.def,example:p.ex,id:word+"|"+p.def+"|"+p.ex};
-      if(!synced.includes(item.id)) batch.push(item);
-    }
-  }
-
-  if(!batch.length){
-    setStatus("online","Up to date");
-    return;
-  }
-
-  try{
-    await fetch(API,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({action:"batch",items:batch})
-    });
-
-    synced = [...new Set([...synced, ...batch.map(i=>i.id)])].slice(-5000);
-    localStorage.setItem("synced", JSON.stringify(synced));
-    setStatus("online","Online");
-
-  }catch{
-    for(const item of batch){
-      if(!queue.some(q=>q.id===item.id)){
-        queue.push({action:"save",...item});
-      }
-    }
-    localStorage.setItem("queue", JSON.stringify(queue));
-    setStatus("local","Saved locally");
-  }
-
-  if(changed){
-    localStorage.setItem("words", JSON.stringify(data));
-    render();
-  }
+for(let i=0;i<w.length;i++){
+let word=w[i].toLowerCase().trim()
+if(!word)continue
+let p=parse(l[i]||"")
+if(!data[word])data[word]=[]
+if(!data[word].some(d=>d.def===p.def&&d.ex===p.ex)){
+data[word].push(p)
+let item={word,definition:p.def,example:p.ex,id:word+"|"+p.def+"|"+p.ex}
+if(!synced.includes(item.id))batch.push(item)
+}
 }
 
-/* text */
+if(!batch.length){setStatus("online","Up to date");return}
+
+try{
+await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"batch",items:batch})})
+synced=[...new Set([...synced,...batch.map(i=>i.id)])].slice(-5000)
+localStorage.setItem("synced",JSON.stringify(synced))
+setStatus("online","Online")
+}catch{
+queue.push(...batch)
+localStorage.setItem("queue",JSON.stringify(queue))
+setStatus("local","Saved locally")
+}
+
+localStorage.setItem("words",JSON.stringify(data))
+render()
+}
+
 function formatText(text,id){
-  if(!text) return "";
-  const short = text.length>100;
-  const lines = getClampLines();
-  return `<div>
-    <div class="def ${short?'clamp':''}" style="-webkit-line-clamp:${lines}" id="${id}">${escapeHTML(text)}</div>
-    ${short?`<span class="link" onclick="toggleText('${id}',this)">Read more</span>`:""}
-  </div>`;
+if(!text)return""
+let short=text.length>100
+return`<div><div class="def ${short?'clamp':''}" style="-webkit-line-clamp:${getClampLines()}" id="${id}">${escapeHTML(text)}</div>${short?`<span class="link" onclick="toggleText('${id}',this)">Read more</span>`:""}</div>`
 }
+
 function toggleText(id,btn){
-  const el = document.getElementById(id);
-  el.classList.toggle("clamp");
-  btn.textContent = el.classList.contains("clamp") ? "Read more" : "Show less";
+let el=document.getElementById(id)
+el.classList.toggle("clamp")
+btn.innerText=el.classList.contains("clamp")?"Read more":"Show less"
 }
 
-/* defs */
 function renderDefs(arr,word){
-  if(!Array.isArray(arr)) arr=[arr];
-  function block(d,i){
-    return `<div style="margin-bottom:6px">
-      ${formatText(d.def, safeId(word+"d"+i))}
-      ${d.ex?`<div class="example">${escapeHTML(d.ex)}</div>`:""}
-    </div>`;
-  }
-  const first = block(arr[0],0);
-  if(arr.length===1) return first;
-
-  const rest = arr.slice(1).map((d,i)=>block(d,i+1)).join("");
-  const id = safeId("g"+word);
-
-  return `<div>
-    ${first}
-    <div class="more" id="${id}">${rest}</div>
-    <span class="link" onclick="toggle('${id}',this)">Show all +${arr.length-1}</span>
-  </div>`;
+if(!Array.isArray(arr))arr=[arr]
+let first=formatText(arr[0].def,safeId(word+"0"))
+if(arr.length===1)return first
+let rest=arr.slice(1).map((d,i)=>formatText(d.def,safeId(word+i+1))).join("")
+let id=safeId("g"+word)
+return`${first}<div class="more" id="${id}">${rest}</div><span class="link" onclick="toggle('${id}',this)">Show all +${arr.length-1}</span>`
 }
+
 function toggle(id,btn){
-  const el = document.getElementById(id);
-  el.classList.toggle("open");
-  btn.textContent = el.classList.contains("open") ? "Hide" : "Show all";
+let el=document.getElementById(id)
+el.classList.toggle("open")
+btn.innerText=el.classList.contains("open")?"Hide":"Show all"
 }
 
-/* load */
 async function load(){
-  try{
-    const saved = localStorage.getItem("words");
-    if(saved) data = JSON.parse(saved) || {};
-  }catch{}
+let saved=localStorage.getItem("words")
+if(saved)data=JSON.parse(saved)
 
-  setStatus("syncing","Syncing...");
+setStatus("syncing","Syncing...")
 
-  try{
-    const r = await fetch(API+"?action=getAll",{cache:"no-store"});
-    if(!r.ok) throw new Error("HTTP "+r.status);
-    const j = await r.json();
-
-    if(j && Array.isArray(j.data)){
-      j.data.forEach(i=>{
-        const w = (i.word||"").toLowerCase();
-        if(!w) return;
-
-        if(!data[w]) data[w] = [];
-        const obj = {def:i.definition||"", ex:i.example||""};
-
-        if(!data[w].some(d=>d.def===obj.def && d.ex===obj.ex)){
-          data[w].push(obj);
-        }
-      });
-    }
-
-    if(retryTimer){ clearInterval(retryTimer); retryTimer=null; }
-
-    setStatus("online","Online");
-    await syncQueue();            // ← مهم
-    setStatus("online","Online"); // ← تأكيد نهائي
-
-  }catch{
-    setStatus("local","API Error");
-    startRetry();
-  }
-
-  render();
+try{
+let r=await fetch(API+"?action=getAll",{cache:"no-store"})
+let j=await r.json()
+if(j.data){
+j.data.forEach(i=>{
+let w=i.word.toLowerCase()
+if(!data[w])data[w]=[]
+let obj={def:i.definition,ex:i.example}
+if(!data[w].some(d=>d.def===obj.def&&d.ex===obj.ex)){
+data[w].push(obj)
+}
+})
+}
+setStatus("online","Online")
+await syncQueue()
+setStatus("online","Online")
+}catch{
+setStatus("local","API Error")
+startRetry()
 }
 
-/* queue */
+render()
+}
+
 async function syncQueue(){
-  if(!queue.length){
-    return; // لا نغير الحالة هنا
-  }
-
-  setStatus("syncing","Syncing...");
-  let newQ = [];
-
-  for(const item of queue){
-    try{
-      await fetch(API,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(item)
-      });
-    }catch{
-      newQ.push(item);
-    }
-  }
-
-  queue = newQ;
-  localStorage.setItem("queue", JSON.stringify(queue));
-
-  if(queue.length){
-    setStatus("syncing","Retrying...");
-  }else{
-    setStatus("online","Online");
-  }
+if(!queue.length)return
+setStatus("syncing","Syncing...")
+let newQ=[]
+for(let item of queue){
+try{
+await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(item)})
+}catch{newQ.push(item)}
+}
+queue=newQ
+localStorage.setItem("queue",JSON.stringify(queue))
+if(queue.length)setStatus("syncing","Retrying...")
+else setStatus("online","Online")
 }
 
-/* render */
 function render(){
-  const s = $("search").value.toLowerCase();
-
-  const list = Object.keys(data).filter(w=>{
-    if(w.includes(s)) return true;
-    return data[w].some(d=>
-      (d.def||"").toLowerCase().includes(s) ||
-      (d.ex||"").toLowerCase().includes(s)
-    );
-  }).reverse();
-
-  $("count").textContent = list.length;
-
-  if(view==="table"){
-    let html = "<table><tr><th>Word</th><th>Details</th><th>Actions</th></tr>";
-    list.forEach(w=>{
-      html += `<tr>
-        <td>${escapeHTML(w)}</td>
-        <td>${renderDefs(data[w],w)}</td>
-        <td>
-          <div class="actions">
-            <span class="action" onclick="speak('${w}')">🔊</span>
-            <span class="action" onclick="editWord('${w}')">✏️</span>
-            <span class="action" onclick="del('${w}')">❌</span>
-          </div>
-        </td>
-      </tr>`;
-    });
-    html += "</table>";
-    $("out").innerHTML = html;
-
-  }else{
-    let html = "<div class='cards'>";
-    list.forEach(w=>{
-      html += `<div class="card">
-        <div class="word">${escapeHTML(w)}</div>
-        ${renderDefs(data[w],w)}
-        <div class="actions">
-          <span class="action" onclick="speak('${w}')">🔊</span>
-          <span class="action" onclick="editWord('${w}')">✏️</span>
-          <span class="action" onclick="del('${w}')">❌</span>
-        </div>
-      </div>`;
-    });
-    html += "</div>";
-    $("out").innerHTML = html;
-  }
+let list=Object.keys(data)
+$("count").innerText=list.length
+let html="<table><tr><th>Word</th><th>Details</th><th>Actions</th></tr>"
+list.forEach(w=>{
+html+=`<tr><td>${w}</td><td>${renderDefs(data[w],w)}</td><td><span onclick="del('${w}')">❌</span></td></tr>`
+})
+$("out").innerHTML=html
 }
 
-/* misc */
-function speak(w){
-  speechSynthesis.cancel();
-  speechSynthesis.speak(new SpeechSynthesisUtterance(w));
-}
-function editWord(w){
-  const d = data[w][0];
-  const n = prompt("Edit first definition", d.def);
-  if(n===null) return;
-  d.def = n;
-  localStorage.setItem("words", JSON.stringify(data));
-  render();
-}
 function del(w){
-  delete data[w];
-  localStorage.setItem("words", JSON.stringify(data));
-  render();
+delete data[w]
+localStorage.setItem("words",JSON.stringify(data))
+render()
 }
 
-let t;
-$("search").oninput = ()=>{
-  clearTimeout(t);
-  t = setTimeout(render,200);
-};
+window.addEventListener("online",load)
+window.addEventListener("offline",()=>setStatus("offline","Offline"))
 
-function setView(v){
-  view = v;
-  $("bt").classList.toggle("active", v==="table");
-  $("bc").classList.toggle("active", v==="cards");
-  render();
-}
-function clearAll(){
-  $("input").value="";
-  $("chat").value="";
-}
+load()
 
-window.addEventListener("online", load);
-window.addEventListener("offline", ()=>setStatus("offline","Offline"));
-
-load();
+// ✅ الحل النهائي
+window.addEventListener("load", ()=>{
+setTimeout(()=>setStatus("online","Online"),1500)
+})
 </script>
 
 </body>
