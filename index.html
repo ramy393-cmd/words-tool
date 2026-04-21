@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<!-- SPEED FIX -->
 <link rel="preconnect" href="https://chat.openai.com">
 <link rel="dns-prefetch" href="https://chat.openai.com">
 
@@ -20,7 +19,6 @@
 --muted:#64748b;
 --gold:#facc15;
 }
-
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:system-ui}
 
@@ -30,7 +28,6 @@ display:flex;justify-content:space-between;align-items:center;
 padding:14px 20px;border-bottom:1px solid var(--border);background:#0a1324
 }
 .logo{color:var(--accent);font-weight:700}
-
 .header-right{display:flex;align-items:center;gap:10px}
 
 /* STATUS */
@@ -53,7 +50,6 @@ textarea,input{
 width:100%;padding:10px;border-radius:8px;
 border:1px solid var(--border);background:var(--card);color:white
 }
-
 button{
 padding:10px;border:none;border-radius:8px;
 cursor:pointer;font-weight:600
@@ -73,7 +69,6 @@ border-bottom:1px solid var(--border);
 background:#0a1324;flex-wrap:wrap
 }
 .toolbar input{flex:1}
-
 .view-btn{
 padding:8px 12px;background:var(--card);
 border:1px solid var(--border);color:var(--muted);
@@ -86,40 +81,25 @@ border-radius:6px;cursor:pointer
 
 /* TABLE */
 table{width:100%;border-collapse:collapse}
-th,td{
-padding:10px;border-bottom:1px solid var(--border);
-vertical-align:top
-}
+th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
 th{color:var(--muted);font-size:12px}
 
 /* CARDS */
-.cards{
-display:grid;grid-template-columns:repeat(3,1fr);gap:12px
-}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 @media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.cards{grid-template-columns:1fr}}
 
 .card{
 background:var(--card);padding:12px;border-radius:10px;
-border:1px solid var(--border);
-display:flex;flex-direction:column;gap:8px
+border:1px solid var(--border);display:flex;flex-direction:column;gap:8px
 }
 
 /* TEXT */
 .word{color:var(--accent);font-weight:700;font-size:15px}
 .def{font-size:14px;line-height:1.6}
-.clamp{
-display:-webkit-box;-webkit-line-clamp:2;
--webkit-box-orient:vertical;overflow:hidden
-}
-.link{
-color:var(--accent);font-size:12px;
-cursor:pointer;margin-top:3px
-}
-.example{
-color:var(--gold);font-size:13px;
-font-style:italic;margin-top:4px
-}
+.clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.link{color:var(--accent);font-size:12px;cursor:pointer;margin-top:3px}
+.example{color:var(--gold);font-size:13px;font-style:italic;margin-top:4px}
 
 /* COLLAPSE */
 .more{display:none}
@@ -145,7 +125,7 @@ font-style:italic;margin-top:4px
 
 <div class="sidebar">
 <textarea id="input" placeholder="Words"></textarea>
-<textarea id="chat" placeholder="definition -- example"></textarea>
+<textarea id="chat" placeholder="definition | example"></textarea>
 
 <button class="btn-primary" onclick="save()">Save</button>
 <button class="btn-secondary" onclick="generate()">AI Prompt</button>
@@ -165,14 +145,13 @@ font-style:italic;margin-top:4px
 </div>
 
 <script>
-const API="https://script.google.com/macros/s/AKfycbwQHi9XYwqzFbQHHfqCf8rv2aeCdQ6ejK3w93zdCPJpHl46nl_CrQCRtZ60i0vk-3c/exec"
+const API="PUT_YOUR_API_HERE"
 
 let data={}
 let queue=JSON.parse(localStorage.getItem("queue")||"[]")
 let view="table"
 let chatTab=null
 
-/* STATUS */
 function setStatus(type,text){
 let s=document.getElementById("status")
 s.className="status "+type
@@ -183,8 +162,14 @@ s.innerText=text
 function buildPrompt(){
 let words=input.value.trim()
 if(!words) return "Give definitions and examples"
-return `For each word return:
-definition -- example
+return `For each word return EXACTLY in this format:
+definition | example
+
+Rules:
+- One line per word
+- Do not add numbering
+- Do not repeat the word
+- Do not add extra text
 
 ${words}`
 }
@@ -198,7 +183,6 @@ setStatus("local","Prompt copied")
 function generate(){
 let prompt=buildPrompt()
 copyPrompt(prompt)
-
 if(!chatTab || chatTab.closed){
 chatTab=window.open("https://chat.openai.com","_blank")
 }else{
@@ -208,13 +192,13 @@ chatTab.focus()
 
 /* PARSE */
 function parse(t){
-if(t.includes("--")){
-let p=t.split("--")
-return {def:p[0].trim(),ex:p.slice(1).join("--").trim()}
-}
 if(t.includes("|")){
 let p=t.split("|")
 return {def:p[0].trim(),ex:p.slice(1).join("|").trim()}
+}
+if(t.includes("--")){
+let p=t.split("--")
+return {def:p[0].trim(),ex:p.slice(1).join("--").trim()}
 }
 return {def:t.trim(),ex:""}
 }
@@ -222,7 +206,6 @@ return {def:t.trim(),ex:""}
 /* SAVE */
 async function save(){
 setStatus("syncing","Syncing...")
-
 let w=input.value.split("\n").filter(Boolean)
 let l=chat.value.split("\n").filter(Boolean)
 
@@ -254,7 +237,6 @@ render()
 function formatText(text,id){
 if(!text) return ""
 let short=text.length>120
-
 return `
 <div>
 <div class="def ${short?'clamp':''}" id="${id}">${text}</div>
@@ -264,7 +246,6 @@ ${short?`<span class="link" onclick="toggleText('${id}',this)">Read more</span>`
 
 function toggleText(id,btn){
 let el=document.getElementById(id)
-
 if(el.classList.contains("clamp")){
 el.classList.remove("clamp")
 btn.innerText="Show less"
@@ -287,7 +268,6 @@ ${d.ex ? `<div class="example">${d.ex}</div>` : ""}
 }
 
 let first=block(arr[0],0)
-
 if(arr.length===1) return first
 
 let rest=arr.slice(1).map((d,i)=>block(d,i+1)).join("")
@@ -303,7 +283,6 @@ ${first}
 
 function toggle(id,btn){
 let el=document.getElementById(id)
-
 if(el.classList.contains("open")){
 el.classList.remove("open")
 btn.innerText="Show all"
@@ -354,7 +333,6 @@ render()
 /* QUEUE */
 async function syncQueue(){
 if(!queue.length) return
-
 setStatus("syncing","Syncing...")
 
 let newQ=[]
@@ -365,7 +343,6 @@ await fetch(API,{method:"POST",body:JSON.stringify(item)})
 newQ.push(item)
 }
 }
-
 queue=newQ
 localStorage.setItem("queue",JSON.stringify(queue))
 setStatus("online","Online")
@@ -424,10 +401,7 @@ out.innerHTML=html
 }
 }
 
-/* ACTIONS */
-function speak(w){
-speechSynthesis.speak(new SpeechSynthesisUtterance(w))
-}
+function speak(w){speechSynthesis.speak(new SpeechSynthesisUtterance(w))}
 function editWord(w){
 let d=data[w][0]
 let n=prompt("Edit",d.def)
