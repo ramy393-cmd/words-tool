@@ -3,311 +3,279 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Words Tool 🚀</title>
+<title>Words Tool</title>
 
 <style>
-body{margin:0;background:#0b1220;color:#fff;font-family:Arial}
-h2{color:#38bdf8;margin:10px}
-
-.container{display:flex;gap:10px;padding:10px}
-.left{flex:3}
-.right{flex:1;background:#1e293b;padding:10px;border-radius:10px}
-@media(max-width:768px){.container{flex-direction:column}}
-
-textarea,input{
-width:100%;padding:10px;margin:6px 0;
-border:none;border-radius:8px;
-background:#1e293b;color:#fff
+:root{
+--bg:#060c18;
+--card:#0f1a2e;
+--border:#1e2d45;
+--accent:#38bdf8;
+--text:#e2e8f0;
+--muted:#64748b;
+--gold:#facc15;
 }
 
-button{
-width:100%;padding:10px;margin:6px 0;
-border:none;border-radius:8px;
-background:#38bdf8;color:#000;font-weight:bold
-}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:system-ui}
+
+/* HEADER */
+.header{display:flex;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:#0a1324}
+.logo{color:var(--accent);font-weight:700}
+
+/* LAYOUT */
+.container{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 50px)}
+@media(max-width:900px){.container{grid-template-columns:1fr}}
+
+/* SIDEBAR */
+.sidebar{padding:16px;background:#0a1324;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:10px}
+textarea,input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:white}
+
+button{padding:10px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
+.btn-primary{background:var(--accent);color:black}
+.btn-secondary{background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#000}
+.btn-danger{border:1px solid var(--border);color:var(--muted)}
+
+/* MAIN */
+.main{display:flex;flex-direction:column}
+.toolbar{display:flex;gap:10px;padding:12px;border-bottom:1px solid var(--border);background:#0a1324;flex-wrap:wrap}
+.toolbar input{flex:1}
+
+.view-btn{padding:8px 12px;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer}
+.view-btn.active{background:var(--accent);color:black}
+
+/* CONTENT */
+.content{overflow:auto;padding:14px}
 
 /* TABLE */
-.table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse}
-th,td{border:1px solid #334155;padding:8px}
-th{background:#1e293b;color:#38bdf8}
-
-td:nth-child(3),td:nth-child(4){
-max-width:350px;
-vertical-align:top;
-}
-
-/* ACTIONS */
-.actions{
-display:flex;
-gap:6px;
-justify-content:center;
-}
-
-.action-btn{
-background:#38bdf8;
-padding:4px 6px;
-border-radius:6px;
-cursor:pointer;
-color:#000;
-}
-
-/* READ MORE */
-.clamp{
-display:-webkit-box;
--webkit-line-clamp:2;
--webkit-box-orient:vertical;
-overflow:hidden;
-}
-
-.read-more{
-color:#38bdf8;
-cursor:pointer;
-font-size:12px;
-display:block;
-margin-top:4px;
-}
-
-/* COLLAPSE */
-.toggle-more{
-color:#38bdf8;
-cursor:pointer;
-font-size:12px;
-margin-top:4px;
-display:block;
-}
+th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--muted);font-size:12px}
 
 /* CARDS */
-.cards{display:none}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.cards{grid-template-columns:1fr}}
 
-.card{
-background:#1e293b;
-margin:10px;
-padding:15px;
-border-radius:10px;
-}
+.card{background:var(--card);padding:12px;border-radius:10px;border:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
 
-.card .word{
-color:#38bdf8;
-font-weight:bold;
-font-size:18px;
-margin-bottom:10px;
-}
+/* TEXT */
+.word{color:var(--accent);font-weight:700;font-size:15px}
+.def{font-size:14px;line-height:1.6;margin-top:4px}
+.clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.link{color:var(--accent);font-size:12px;cursor:pointer;margin-top:3px;display:inline-block}
+.example{color:var(--gold);font-size:13px;font-style:italic;line-height:1.5;margin-top:4px}
 
-/* MOBILE */
-@media(max-width:768px){
-.table-wrap{display:none}
-.cards{display:block}
-}
+/* ACTIONS */
+.actions{display:flex;gap:10px;margin-top:6px}
+.action{cursor:pointer;font-size:15px}
+.empty{text-align:center;margin-top:60px;color:var(--muted)}
 </style>
 </head>
 
 <body>
 
-<h2>Words Tool 🚀</h2>
+<div class="header">
+<div class="logo">Words Tool</div>
+<div>Words: <span id="count">0</span></div>
+</div>
 
 <div class="container">
-<div class="left">
+
+<div class="sidebar">
 <textarea id="input" placeholder="Words"></textarea>
 <textarea id="chat" placeholder="definition -- example"></textarea>
+
+<button class="btn-primary" onclick="save()">Save</button>
+<button class="btn-secondary" onclick="generate()">AI Prompt</button>
+<button class="btn-danger" onclick="clearAll()">Clear</button>
 </div>
 
-<div class="right">
-<button onclick="generate()">Generate Prompt</button>
-<button onclick="save()">Save</button>
-<button onclick="clearAll()">Clear</button>
-</div>
+<div class="main">
+<div class="toolbar">
+<input id="search" placeholder="Search...">
+<button class="view-btn active" id="bt" onclick="setView('table')">Table</button>
+<button class="view-btn" id="bc" onclick="setView('cards')">Cards</button>
 </div>
 
-<div style="padding:10px">
-<input id="search" placeholder="Search..." oninput="render()">
-<div id="out"></div>
+<div class="content" id="out"></div>
+</div>
+
 </div>
 
 <script>
+const API="https://script.google.com/macros/s/AKfycbwQHi9XYwqzFbQHHfqCf8rv2aeCdQ6ejK3w93zdCPJpHl46nl_CrQCRtZ60i0vk-3c/exec"
 
-const API="PUT_YOUR_API_HERE";
 let data={}
+let queue=JSON.parse(localStorage.getItem("queue")||"[]")
+let view="table"
 
-/* LOAD */
-async function load(){
-let saved=localStorage.getItem("wordsData")
-if(saved){
-data=JSON.parse(saved)
+/* ===== MERGE ===== */
+function merge(oldD,newD){
+let m={...oldD}
+for(let w in newD){
+if(!m[w]) m[w]=[]
+newD[w].forEach(n=>{
+if(!m[w].some(o=>o.def===n.def && o.ex===n.ex)) m[w].push(n)
+})
 }
+return m
+}
+
+/* ===== LOAD ===== */
+async function load(){
+let saved=localStorage.getItem("words")
+if(saved) data=JSON.parse(saved)
 
 try{
 let r=await fetch(API+"?action=getAll")
 let j=await r.json()
 
-let newData={}
-
+if(j?.data?.length){
+let fresh={}
 j.data.forEach(i=>{
 let w=i.word.toLowerCase()
-if(!newData[w]) newData[w]=[]
-
-let exists=newData[w].some(d=>d.def===i.definition && d.ex===i.example)
-
-if(!exists){
-newData[w].push({def:i.definition,ex:i.example||""})
-}
+if(!fresh[w]) fresh[w]=[]
+fresh[w].push({def:i.definition||"",ex:i.example||""})
 })
-
-data=newData
-localStorage.setItem("wordsData",JSON.stringify(data))
-
+data=merge(data,fresh)
+localStorage.setItem("words",JSON.stringify(data))
+}
 }catch{}
 
+syncQueue()
 render()
 }
 
-/* PARSE */
-function parseLine(text){
-if(text.includes("--")){
-let p=text.split("--")
+/* ===== QUEUE ===== */
+function addQueue(item){
+queue.push(item)
+localStorage.setItem("queue",JSON.stringify(queue))
+}
+
+async function syncQueue(){
+if(!queue.length) return
+let newQ=[]
+for(let item of queue){
+try{
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
+}catch{
+newQ.push(item)
+}
+}
+queue=newQ
+localStorage.setItem("queue",JSON.stringify(queue))
+}
+
+/* ===== SAVE ===== */
+async function save(){
+let w=input.value.split("\n").filter(Boolean)
+let l=chat.value.split("\n").filter(Boolean)
+
+for(let i=0;i<w.length;i++){
+let word=w[i].toLowerCase().trim()
+let p=parse(l[i]||"")
+
+if(!data[word]) data[word]=[]
+
+if(!data[word].some(d=>d.def===p.def && d.ex===p.ex)){
+data[word].push(p)
+
+try{
+await fetch(API,{method:"POST",body:JSON.stringify({action:"save",word,definition:p.def,example:p.ex})})
+}catch{
+addQueue({action:"save",word,definition:p.def,example:p.ex})
+}
+}
+}
+
+localStorage.setItem("words",JSON.stringify(data))
+render()
+}
+
+/* ===== PARSE ===== */
+function parse(t){
+if(t.includes("--")){
+let p=t.split("--")
 return {def:p[0].trim(),ex:p.slice(1).join("--").trim()}
 }
-return {def:text,ex:""}
+if(t.includes("|")){
+let p=t.split("|")
+return {def:p[0].trim(),ex:p.slice(1).join("|").trim()}
+}
+return {def:t.trim(),ex:""}
 }
 
-/* SAVE */
-async function save(){
-let words=input.value.split("\n").filter(Boolean)
-let lines=chat.value.split("\n").filter(Boolean)
-
-for(let i=0;i<words.length;i++){
-let w=words[i].toLowerCase()
-let p=parseLine(lines[i]||"")
-
-if(!data[w]) data[w]=[]
-
-let exists=data[w].some(d=>d.def===p.def && d.ex===p.ex)
-
-if(!exists){
-data[w].push(p)
-localStorage.setItem("wordsData",JSON.stringify(data))
-
-await fetch(API,{
-method:"POST",
-body:JSON.stringify({
-action:"save",
-word:w,
-definition:p.def,
-example:p.ex
-})
-})
-}
-}
-
-render()
-}
-
-/* READ MORE */
-function formatText(text){
+/* ===== TEXT ===== */
+function formatText(text,id){
 if(!text) return ""
-if(text.length<120) return text
-
-let id="t"+Math.random()
-
-return `
-<div>
-<div class="clamp" id="${id}">${text}</div>
-<span class="read-more" onclick="
-document.getElementById('${id}').style.webkitLineClamp='unset';
-this.remove();
-">Read more</span>
-</div>`
+let short=text.length>120
+return `<div><div class="def ${short?'clamp':''}" id="${id}">${text}</div>
+${short?`<span class="link" onclick="toggleText('${id}',this)">Read more</span>`:""}</div>`
 }
 
-/* COLLAPSE */
-function renderDefs(defs){
-let arr = Array.isArray(defs)?defs:[defs]
-
-let first = `<div>${formatText(arr[0].def)}</div>`
-
-if(arr.length===1) return first
-
-let rest = arr.slice(1).map(d=>`<div>${formatText(d.def)}</div>`).join("")
-let id="d"+Math.random()
-
-return `
-<div>
-${first}
-<div id="${id}" style="display:none">${rest}</div>
-<span class="toggle-more" onclick="
-let el=document.getElementById('${id}')
-if(el.style.display==='none'){
-el.style.display='block'
-this.innerText='Hide'
+function toggleText(id,btn){
+let el=document.getElementById(id)
+if(el.classList.contains("clamp")){
+el.classList.remove("clamp")
+btn.innerText="Show less"
 }else{
-el.style.display='none'
-this.innerText='Show all'
+el.classList.add("clamp")
+btn.innerText="Read more"
 }
-">Show all (${arr.length})</span>
-</div>`
 }
 
-/* RENDER */
+/* ===== RENDER ===== */
 function render(){
-
 let s=search.value.toLowerCase()
-let list=Object.keys(data).filter(w=>w.includes(s)).reverse()
 
-let table="<div class='table-wrap'><table>"
-table+="<tr><th>#</th><th>Word</th><th>Definition</th><th>Example</th><th>Action</th></tr>"
+let list=Object.keys(data).filter(w=>{
+if(w.includes(s)) return true
+return data[w].some(d=>d.def.toLowerCase().includes(s)||d.ex.toLowerCase().includes(s))
+}).reverse()
 
-let cards="<div class='cards'>"
+count.innerText=list.length
 
-let i=list.length
-
+if(view==="cards"){
+let html="<div class='cards'>"
 list.forEach(w=>{
-let defs = Array.isArray(data[w])?data[w]:[data[w]]
-
-let defHTML = renderDefs(defs)
-let exHTML = defs.map(d=>`<div style="color:#facc15">${formatText(d.ex)}</div>`).join("")
-
-table+=`
-<tr>
-<td>${i}</td>
-<td>${w}</td>
-<td>${defHTML}</td>
-<td>${exHTML}</td>
-<td class="actions">
-<span class="action-btn">🔊</span>
-<span class="action-btn">✏️</span>
-<span class="action-btn">❌</span>
-</td>
-</tr>
-`
-
-cards+=`
-<div class="card">
+html+=`<div class="card">
 <div class="word">${w}</div>
-<div>${defHTML}</div>
-<div style="color:#facc15">${exHTML}</div>
+${data[w].map((d,i)=>`
+${formatText(d.def,w+i)}
+${d.ex?`<div class="example">${formatText(d.ex,w+"e"+i)}</div>`:""}
+`).join("")}
+<div class="actions">
+<span class="action" onclick="del('${w}')">❌</span>
 </div>
-`
-
-i--
+</div>`
 })
-
-table+="</table></div>"
-cards+="</div>"
-
-out.innerHTML = table + cards
+html+="</div>"
+out.innerHTML=html
+}else{
+let html="<table><tr><th>Word</th><th>Details</th></tr>"
+list.forEach(w=>{
+html+=`<tr>
+<td>${w}</td>
+<td>${data[w].map((d,i)=>`
+${formatText(d.def,w+i)}
+${d.ex?`<div class="example">${formatText(d.ex,w+"e"+i)}</div>`:""}
+`).join("")}</td>
+</tr>`
+})
+html+="</table>"
+out.innerHTML=html
+}
 }
 
-function clearAll(){
-input.value=""
-chat.value=""
-}
+search.oninput=render
+function setView(v){view=v;render()}
+function clearAll(){input.value="";chat.value=""}
+function generate(){window.open("https://chat.openai.com")}
 
-function generate(){
-window.open("https://chat.openai.com","_blank")
-}
+window.addEventListener("online",syncQueue)
 
 load()
-
 </script>
 
 </body>
