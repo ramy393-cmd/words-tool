@@ -161,37 +161,23 @@ let data={}
 let queue=JSON.parse(localStorage.getItem("queue")||"[]")
 let view="table"
 
+/* STATUS */
 function setStatus(c,t){
 status.className="status "+c
 status.innerText=t
 }
 
-function updateStatus(){
-if(!navigator.onLine){
-setStatus("offline","Offline")
-return
-}
-if(queue.length>0){
-setStatus("local","Pending sync")
-return
-}
-setStatus("online","Synced")
-}
-
 /* SAFE */
 function safeText(t){
-return String(t||"")
-.replace(/</g,"&lt;")
-.replace(/>/g,"&gt;")
+return String(t||"").replace(/</g,"&lt;").replace(/>/g,"&gt;")
 }
 
 /* SPEAK */
 function speak(w){
-let u=new SpeechSynthesisUtterance(w)
-u.lang="en-US"
-speechSynthesis.speak(u)
+speechSynthesis.speak(new SpeechSynthesisUtterance(w))
 }
 
+/* PARSE */
 function parse(t){
 if(!t)return{def:"",ex:""}
 if(t.includes("|")){
@@ -201,78 +187,66 @@ return{def:a[0].trim(),ex:a.slice(1).join("|").trim()}
 return{def:t.trim(),ex:""}
 }
 
+/* SAVE */
 async function save(){
 setStatus("syncing","Syncing...")
 
-let w=input.value.split("\n").filter(Boolean)
-let l=chat.value.split("\n")
-let batch=[]
+let words=input.value.split("\n").filter(Boolean)
+let lines=chat.value.split("\n")
 
-w.forEach((word,i)=>{
-word=word.toLowerCase()
-let p=parse(l[i]||"")
+for(let i=0;i<words.length;i++){
+let word=words[i].toLowerCase()
+let p=parse(lines[i]||"")
 
 if(!data[word])data[word]=[]
 
 if(!data[word].some(d=>d.def===p.def&&d.ex===p.ex)){
 data[word].push(p)
-batch.push({word,definition:p.def,example:p.ex})
-}
-})
 
-localStorage.setItem("words",JSON.stringify(data))
+let item={action:"save",word,definition:p.def,example:p.ex}
 
 try{
-let res=await fetch(API,{
-method:"POST",
-body:JSON.stringify({action:"batch",items:batch})
-})
-
-let j=await res.json()
-
-if(j && j.ok){
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
 setStatus("online","Synced")
-}else throw "err"
-
 }catch{
-queue.push(...batch)
+queue.push(item)
 localStorage.setItem("queue",JSON.stringify(queue))
 setStatus("local","Saved locally")
 }
-
-render()
-}
-
-async function del(w){
-let defs=data[w]||[]
-delete data[w]
-localStorage.setItem("words",JSON.stringify(data))
-render()
-
-for(let d of defs){
-let item={action:"delete",word:w,definition:d.def,example:d.ex}
-try{await fetch(API,{method:"POST",body:JSON.stringify(item)})}
-catch{queue.push(item)}
 }
 }
 
-async function editWord(w){
-let d=data[w][0]
-let newDef=prompt("Edit",d.def)
-if(newDef===null)return
-let newEx=prompt("Example",d.ex||"")
-
-let item={action:"update",word:w,oldDef:d.def,oldEx:d.ex||"",newDef,newEx}
-
-try{await fetch(API,{method:"POST",body:JSON.stringify(item)})}
-catch{queue.push(item)}
-
-d.def=newDef
-d.ex=newEx
 localStorage.setItem("words",JSON.stringify(data))
 render()
 }
 
+/* SYNC QUEUE */
+async function syncQueue(){
+if(!queue.length)return
+
+setStatus("syncing","Syncing...")
+
+let newQ=[]
+
+for(let item of queue){
+try{
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
+}catch{
+newQ.push(item)
+}
+}
+
+queue=newQ
+localStorage.setItem("queue",JSON.stringify(queue))
+
+if(queue.length===0){
+setStatus("online","Synced")
+}else{
+setStatus("local","Pending sync")
+}
+}
+
+/* LOAD */
 async function load(){
 let saved=localStorage.getItem("words")
 if(saved)data=JSON.parse(saved)
@@ -291,22 +265,22 @@ data[w].push(obj)
 }
 })
 
-}catch{}
+setStatus("online","Synced")
 
-render()
-updateStatus()
+}catch{
+setStatus("local","Offline data")
 }
 
-setInterval(updateStatus,3000)
-window.addEventListener("online",updateStatus)
-window.addEventListener("offline",updateStatus)
+render()
+syncQueue()
+}
 
+/* RENDER */
 function render(){
 let s=search.value.toLowerCase()
 
 let list=Object.keys(data).filter(w=>{
-return w.includes(s) ||
-data[w].some(d=>d.def.toLowerCase().includes(s))
+return w.includes(s)||data[w].some(d=>d.def.toLowerCase().includes(s))
 }).reverse()
 
 count.innerText=list.length
@@ -326,10 +300,32 @@ list.map(w=>`
 </tr>`).join("")+"</table>"
 }
 
+/* ACTIONS */
+function del(w){
+delete data[w]
+localStorage.setItem("words",JSON.stringify(data))
+render()
+}
+
+function editWord(w){
+let d=data[w][0]
+let n=prompt("Edit",d.def)
+if(n!==null){
+d.def=n
+localStorage.setItem("words",JSON.stringify(data))
+render()
+}
+}
+
 function clearAll(){
 input.value=""
 chat.value=""
 }
+
+/* AUTO SYNC */
+setInterval(syncQueue,5000)
+window.addEventListener("online",syncQueue)
+window.addEventListener("offline",()=>setStatus("offline","Offline"))
 
 load()
 </script>
