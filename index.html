@@ -159,8 +159,8 @@ try{
 await fetch(API,{
 method:"POST",
 body:JSON.stringify({
-  action:"batch",
-  items:[item]
+action:"batch",
+items:batch
 }),
 mode:"no-cors"
 })
@@ -176,7 +176,7 @@ localStorage.setItem("words",JSON.stringify(data))
 render()
 }
 
-/* QUEUE FIX */
+/* QUEUE (FIXED) */
 async function syncQueue(){
 if(!queue.length)return
 setStatus("syncing","Syncing...")
@@ -186,7 +186,10 @@ for(let item of queue){
 try{
 await fetch(API,{
 method:"POST",
-body:JSON.stringify(item),
+body:JSON.stringify({
+action:"batch",
+items:[item]
+}),
 mode:"no-cors"
 })
 }catch{
