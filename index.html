@@ -9,31 +9,65 @@
 <style>
 :root{
 --bg:#060c18;--card:#0f1a2e;--border:#1e2d45;
---accent:#38bdf8;--text:#e2e8f0;--muted:#64748b;--gold:#facc15;
+--accent:#38bdf8;--text:#e2e8f0;--gold:#facc15;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:system-ui}
-.header{display:flex;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:#0a1324}
+
+.header{
+display:flex;justify-content:space-between;
+padding:14px 20px;border-bottom:1px solid var(--border);
+background:#0a1324
+}
 .logo{color:var(--accent);font-weight:700}
+
 .status{padding:4px 10px;border-radius:999px;font-size:12px}
 .online{background:#064e3b;color:#34d399}
 .offline{background:#450a0a;color:#f87171}
 .syncing{background:#422006;color:#facc15}
 .local{background:#422006;color:#facc15}
 
-.container{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 50px)}
-.sidebar{padding:16px;background:#0a1324;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:10px}
-textarea,input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:white}
-button{padding:10px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
+.container{
+display:grid;
+grid-template-columns:300px 1fr;
+height:calc(100vh - 50px)
+}
+
+.sidebar{
+padding:16px;background:#0a1324;
+border-right:1px solid var(--border);
+display:flex;flex-direction:column;gap:10px
+}
+
+textarea,input{
+width:100%;padding:10px;border-radius:8px;
+border:1px solid var(--border);
+background:var(--card);color:white
+}
+
+button{
+padding:10px;border:none;border-radius:8px;
+cursor:pointer;font-weight:600
+}
+
 .btn-primary{background:var(--accent);color:black}
 .btn-secondary{background:linear-gradient(135deg,#0ea5e9,#38bdf8)}
 .btn-danger{border:1px solid var(--border)}
 
 .main{display:flex;flex-direction:column}
-.toolbar{display:flex;gap:10px;padding:12px;border-bottom:1px solid var(--border)}
+
+.toolbar{
+display:flex;gap:10px;padding:12px;
+border-bottom:1px solid var(--border)
+}
+
 .toolbar input{flex:1}
 
-.view-btn{padding:8px;background:var(--card);border:1px solid var(--border);cursor:pointer}
+.view-btn{
+padding:8px;background:var(--card);
+border:1px solid var(--border);
+cursor:pointer
+}
 .view-btn.active{background:var(--accent);color:black}
 
 .content{overflow:auto;padding:14px}
@@ -41,18 +75,25 @@ button{padding:10px;border:none;border-radius:8px;cursor:pointer;font-weight:600
 table{width:100%;border-collapse:collapse}
 th,td{padding:10px;border-bottom:1px solid var(--border)}
 
-.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-.card{background:var(--card);padding:12px;border-radius:10px;border:1px solid var(--border)}
+.cards{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+gap:12px
+}
 
-.word{color:var(--accent);font-weight:700}
+.card{
+background:var(--card);
+padding:12px;border-radius:10px;
+border:1px solid var(--border)
+}
 
-.clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.link{color:var(--accent);cursor:pointer;font-size:12px}
-.example{color:var(--gold);font-style:italic;margin-top:4px}
-.more{display:none}
-.more.open{display:block}
+.word{
+color:var(--accent);
+font-weight:700;
+direction:ltr;
+unicode-bidi:plaintext;
+}
 
-/* FIXES */
 .actions{
 display:flex;
 gap:10px;
@@ -60,11 +101,25 @@ align-items:center;
 white-space:nowrap;
 }
 
-td, .word{
-word-break: break-word;
-overflow-wrap: anywhere;
+/* FIX التكسير */
+td{
+word-break:normal;
+overflow-wrap:break-word;
+white-space:normal;
 }
 
+.clamp{
+display:-webkit-box;
+-webkit-line-clamp:2;
+-webkit-box-orient:vertical;
+overflow:hidden
+}
+
+.link{color:var(--accent);cursor:pointer;font-size:12px}
+.example{color:var(--gold);font-style:italic;margin-top:4px}
+
+.more{display:none}
+.more.open{display:block}
 </style>
 
 </head>
@@ -112,9 +167,9 @@ status.className="status "+c
 status.innerText=t
 }
 
-/* FIX TEXT */
+/* SAFE TEXT */
 function safeText(t){
-return t
+return String(t||"")
 .replace(/</g,"&lt;")
 .replace(/>/g,"&gt;")
 .replace(/"/g,"&quot;")
@@ -123,7 +178,7 @@ return t
 
 /* SPEAK */
 function speak(word){
-const u=new SpeechSynthesisUtterance(word)
+let u=new SpeechSynthesisUtterance(word)
 u.lang="en-US"
 speechSynthesis.speak(u)
 }
@@ -159,8 +214,19 @@ batch.push({word,definition:p.def,example:p.ex})
 localStorage.setItem("words",JSON.stringify(data))
 
 try{
-await fetch(API,{method:"POST",body:JSON.stringify({action:"batch",items:batch})})
-setStatus("online","Online")
+let res=await fetch(API,{
+method:"POST",
+body:JSON.stringify({action:"batch",items:batch})
+})
+
+let j=await res.json()
+
+if(j && j.ok){
+setStatus("online","Synced")
+}else{
+throw "error"
+}
+
 }catch{
 queue.push(...batch)
 localStorage.setItem("queue",JSON.stringify(queue))
@@ -214,14 +280,17 @@ j.data.forEach(i=>{
 let w=i.word.toLowerCase()
 if(!data[w])data[w]=[]
 let obj={def:i.definition||"",ex:i.example||""}
+
 if(!data[w].some(d=>d.def===obj.def&&d.ex===obj.ex)){
 data[w].push(obj)
 }
 })
 
-setStatus("online","Online")
+setStatus("online","Synced")
+
 }catch{
-setStatus(queue.length?"local":"offline",queue.length?"Saved locally":"Offline")
+setStatus(queue.length?"local":"offline",
+queue.length?"Pending sync":"Offline")
 }
 
 render()
@@ -241,14 +310,18 @@ b.innerText=el.classList.contains("clamp")?"Read more":"Show less"
 
 function renderDefs(arr,w){
 let first=formatText(arr[0].def,w)
-let rest=arr.slice(1).map(d=>`
-<div>${safeText(d.def)}${d.ex?`<div class="example">${safeText(d.ex)}</div>`:""}</div>`).join("")
 
-if(arr.length==1){
+let rest=arr.slice(1).map(d=>`
+<div>${safeText(d.def)}
+${d.ex?`<div class="example">${safeText(d.ex)}</div>`:""}
+</div>`).join("")
+
+if(arr.length===1){
 return first+(arr[0].ex?`<div class="example">${safeText(arr[0].ex)}</div>`:"")
 }
 
-return `${first}${arr[0].ex?`<div class="example">${safeText(arr[0].ex)}</div>`:""}
+return `${first}
+${arr[0].ex?`<div class="example">${safeText(arr[0].ex)}</div>`:""}
 <div class="more" id="g${w}">${rest}</div>
 <span class="link" onclick="toggle('${w}')">Show all</span>`
 }
@@ -261,7 +334,8 @@ function render(){
 let s=search.value.toLowerCase()
 
 let list=Object.keys(data).filter(w=>{
-return w.includes(s)||data[w].some(d=>d.def.toLowerCase().includes(s))
+return w.includes(s) ||
+data[w].some(d=>d.def.toLowerCase().includes(s))
 }).reverse()
 
 count.innerText=list.length
@@ -302,7 +376,10 @@ bc.classList.toggle("active",v==="cards")
 render()
 }
 
-function clearAll(){input.value="";chat.value=""}
+function clearAll(){
+input.value=""
+chat.value=""
+}
 
 load()
 </script>
