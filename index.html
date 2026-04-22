@@ -1,27 +1,122 @@
 <!DOCTYPE html>
-
 <html>
 <head>
 <meta charset="UTF-8">
 <title>Words Tool</title>
 
 <style>
-body{background:#060c18;color:#fff;font-family:sans-serif;margin:0}
-.container{display:flex;height:100vh}
-.sidebar{width:280px;padding:10px;background:#0a1324}
-textarea,input{width:100%;margin-bottom:6px;padding:8px;background:#111;color:#fff;border:1px solid #333}
-button{width:100%;padding:8px;margin-bottom:5px}
-.main{flex:1;padding:10px}
-.word{color:#38bdf8;font-weight:bold}
-.example{color:#facc15;font-size:12px}
-.actions{display:flex;gap:8px}
-.status{padding:4px 10px;border-radius:20px}
+body{
+  background:#060c18;
+  color:#fff;
+  font-family:sans-serif;
+  margin:0;
+}
+
+.container{
+  display:flex;
+  height:100vh;
+}
+
+.sidebar{
+  width:280px;
+  padding:12px;
+  background:#0a1324;
+}
+
+textarea,input{
+  width:100%;
+  margin-bottom:8px;
+  padding:10px;
+  background:#111;
+  color:#fff;
+  border:1px solid #333;
+  border-radius:6px;
+}
+
+button{
+  width:100%;
+  padding:10px;
+  margin-bottom:6px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+button:first-of-type{background:#38bdf8;color:#000;}
+button:last-of-type{background:#444;color:#fff;}
+
+.main{
+  flex:1;
+  padding:12px;
+}
+
+.topbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:10px;
+}
+
+.status{
+  padding:5px 12px;
+  border-radius:20px;
+  font-size:13px;
+}
+
 .online{background:#064e3b}
 .offline{background:#450a0a}
 .syncing{background:#422006}
 .pending{background:#422006}
-table{width:100%;table-layout:fixed}
-td{word-break:break-word}
+
+.word{
+  color:#38bdf8;
+  font-weight:bold;
+}
+
+.example{
+  color:#facc15;
+  font-size:12px;
+  margin-top:4px;
+}
+
+table{
+  width:100%;
+  table-layout:fixed;
+  border-collapse:collapse;
+}
+
+th,td{
+  padding:10px;
+  text-align:left;
+  vertical-align:top;
+}
+
+td{
+  word-break:break-word;
+}
+
+.def-row{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  padding:6px 0;
+  border-bottom:1px solid #1e2d45;
+}
+
+.def-text{
+  flex:1;
+}
+
+.actions{
+  display:flex;
+  gap:10px;
+  flex-shrink:0;
+}
+
+.actions span{
+  cursor:pointer;
+}
+
 </style>
 
 </head>
@@ -31,20 +126,23 @@ td{word-break:break-word}
 <div class="container">
 
 <div class="sidebar">
-<textarea id="input" placeholder="Words"></textarea>
+<textarea id="input" placeholder="Words (one per line)"></textarea>
 <textarea id="chat" placeholder="definition | example"></textarea>
+
 <button onclick="save()">Save</button>
 <button onclick="clearAll()">Clear</button>
 </div>
 
 <div class="main">
 
+<div class="topbar">
 <div>
 <span id="status" class="status syncing">Starting...</span>
 <span id="count"></span>
 </div>
+</div>
 
-<input id="search" oninput="render()" placeholder="Search">
+<input id="search" oninput="render()" placeholder="Search...">
 
 <div id="out"></div>
 
@@ -56,27 +154,26 @@ td{word-break:break-word}
 
 const API="https://script.google.com/macros/s/AKfycbxn6Y2FceyY3tg2v4kOvzI0Ghu5Pi6ulqhXi3Rl7G3LVf50mSjtcIa5ZlUx45RzbfyP/exec";
 
-const statusEl = document.getElementById("status")
+const statusEl=document.getElementById("status")
 
 let data={}
-let queue=[]
 
 /* STATUS */
 function setStatus(type,text){
-statusEl.className="status "+type
-statusEl.innerText=text
+  statusEl.className="status "+type
+  statusEl.innerText=text
 }
 
 /* SPEAK US */
 function speak(word){
-let u=new SpeechSynthesisUtterance(word)
-u.lang="en-US"
-speechSynthesis.speak(u)
+  let u=new SpeechSynthesisUtterance(word)
+  u.lang="en-US"
+  speechSynthesis.speak(u)
 }
 
-/* SAFE TEXT */
+/* ESCAPE */
 function esc(t){
-return t.replace(/'/g,"\\'")
+  return t.replace(/'/g,"\\'")
 }
 
 /* SAVE */
@@ -132,8 +229,7 @@ setStatus("online","Online")
 
 }catch{
 
-queue.push(...items)
-setStatus("pending","Saved locally")
+setStatus("offline","Offline")
 
 }
 
@@ -149,7 +245,7 @@ try{
 let r=await fetch(API+"?action=getAll")
 let j=await r.json()
 
-data={} // مهم
+data={}
 
 j.data.forEach(i=>{
 
@@ -160,7 +256,7 @@ if(!data[word]) data[word]=[]
 let obj={
 def:i.definition,
 ex:i.example,
-createdAt:i.createdAt
+createdAt:Date.now()
 }
 
 if(!data[word].some(d=>d.def===obj.def && d.ex===obj.ex)){
@@ -200,11 +296,7 @@ definition:def
 })
 })
 
-}catch{
-
-queue.push({action:"delete",word,definition:def})
-
-}
+}catch{}
 
 }
 
@@ -233,16 +325,7 @@ newDefinition:newDef
 })
 })
 
-}catch{
-
-queue.push({
-action:"update",
-word,
-oldDefinition:oldDef,
-newDefinition:newDef
-})
-
-}
+}catch{}
 
 }
 
@@ -266,32 +349,39 @@ count.innerText=words.length
 
 out.innerHTML=`
 <table>
-<tr><th>Word</th><th>Details</th><th>Actions</th></tr>
+<tr>
+<th style="width:20%">Word</th>
+<th style="width:80%">Details</th>
+</tr>
+
 ${words.map(w=>{
 
 let defs=data[w].map(d=>`
-<div>
-<div>${d.def}</div>
+<div class="def-row">
+
+<div class="def-text">
+${d.def}
 ${d.ex?`<div class="example">${d.ex}</div>`:""}
+</div>
+
 <div class="actions">
 <span onclick="speak('${esc(w)}')">🔊</span>
 <span onclick="edit('${esc(w)}','${esc(d.def)}')">✏️</span>
 <span onclick="del('${esc(w)}','${esc(d.def)}')">❌</span>
 </div>
-<hr>
+
 </div>
 `).join("")
 
 return `<tr>
 <td class="word">${w}</td>
 <td>${defs}</td>
-<td></td>
 </tr>`
 
 }).join("")}
+
 </table>
 `
-
 }
 
 function clearAll(){
