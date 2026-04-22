@@ -13,52 +13,56 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:system-ui}
-.header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);background:#0a1324}
+.header{display:flex;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:#0a1324}
 .logo{color:var(--accent);font-weight:700}
-.header-right{display:flex;align-items:center;gap:10px}
-.status{padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600}
+.status{padding:4px 10px;border-radius:999px;font-size:12px}
 .online{background:#064e3b;color:#34d399}
 .offline{background:#450a0a;color:#f87171}
 .syncing{background:#422006;color:#facc15}
 .local{background:#422006;color:#facc15}
+
 .container{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 50px)}
-@media(max-width:900px){.container{grid-template-columns:1fr}}
 .sidebar{padding:16px;background:#0a1324;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:10px}
 textarea,input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:white}
 button{padding:10px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
 .btn-primary{background:var(--accent);color:black}
-.btn-secondary{background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#000}
-.btn-danger{border:1px solid var(--border);color:var(--muted)}
+.btn-secondary{background:linear-gradient(135deg,#0ea5e9,#38bdf8)}
+.btn-danger{border:1px solid var(--border)}
+
 .main{display:flex;flex-direction:column}
-.toolbar{display:flex;gap:10px;padding:12px;border-bottom:1px solid var(--border);background:#0a1324;flex-wrap:wrap}
+.toolbar{display:flex;gap:10px;padding:12px;border-bottom:1px solid var(--border)}
 .toolbar input{flex:1}
-.view-btn{padding:8px 12px;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer}
+
+.view-btn{padding:8px;background:var(--card);border:1px solid var(--border);cursor:pointer}
 .view-btn.active{background:var(--accent);color:black}
+
 .content{overflow:auto;padding:14px}
+
 table{width:100%;border-collapse:collapse}
-th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
-.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-@media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:700px){.cards{grid-template-columns:1fr}}
+th,td{padding:10px;border-bottom:1px solid var(--border)}
+
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
 .card{background:var(--card);padding:12px;border-radius:10px;border:1px solid var(--border)}
+
 .word{color:var(--accent);font-weight:700}
 .def{line-height:1.6}
 .clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.link{color:var(--accent);font-size:12px;cursor:pointer}
-.example{color:var(--gold);font-style:italic;margin-top:4px}
+.link{color:var(--accent);cursor:pointer;font-size:12px}
+.example{color:var(--gold);font-style:italic}
 .more{display:none}
 .more.open{display:block}
 .actions{display:flex;gap:10px}
 </style>
 
 </head>
+
 <body>
 
 <div class="header">
 <div class="logo">Words Tool</div>
-<div class="header-right">
-<div id="status" class="status syncing">Starting...</div>
-<div>Words: <span id="count">0</span></div>
+<div>
+<span id="status" class="status syncing">Starting...</span>
+Words: <span id="count">0</span>
 </div>
 </div>
 
@@ -90,11 +94,9 @@ let data={}
 let queue=JSON.parse(localStorage.getItem("queue")||"[]")
 let view="table"
 
-/* STATUS */
-function setStatus(t,x){
-let s=document.getElementById("status")
-s.className="status "+t
-s.innerText=x
+function setStatus(c,t){
+status.className="status "+c
+status.innerText=t
 }
 
 /* PARSE */
@@ -103,10 +105,6 @@ if(!t)return{def:"",ex:""}
 if(t.includes("|")){
 let a=t.split("|")
 return{def:a[0].trim(),ex:a.slice(1).join("|").trim()}
-}
-if(t.includes("--")){
-let a=t.split("--")
-return{def:a[0].trim(),ex:a.slice(1).join("--").trim()}
 }
 return{def:t.trim(),ex:""}
 }
@@ -134,10 +132,7 @@ batch.push({word,definition:p.def,example:p.ex})
 localStorage.setItem("words",JSON.stringify(data))
 
 try{
-await fetch(API,{
-method:"POST",
-body:JSON.stringify({action:"batch",items:batch})
-})
+await fetch(API,{method:"POST",body:JSON.stringify({action:"batch",items:batch})})
 setStatus("online","Online")
 }catch{
 queue.push(...batch)
@@ -151,29 +146,22 @@ render()
 /* DELETE */
 async function del(w){
 let defs=data[w]||[]
-
 delete data[w]
 localStorage.setItem("words",JSON.stringify(data))
 render()
 
 for(let d of defs){
 let item={action:"delete",word:w,definition:d.def,example:d.ex}
-try{
-await fetch(API,{method:"POST",body:JSON.stringify(item)})
-}catch{
-queue.push(item)
-localStorage.setItem("queue",JSON.stringify(queue))
-}
+try{await fetch(API,{method:"POST",body:JSON.stringify(item)})}
+catch{queue.push(item)}
 }
 }
 
 /* EDIT */
 async function editWord(w){
 let d=data[w][0]
-
 let newDef=prompt("Edit",d.def)
 if(newDef===null)return
-
 let newEx=prompt("Example",d.ex||"")
 
 let item={
@@ -181,38 +169,16 @@ action:"update",
 word:w,
 oldDef:d.def,
 oldEx:d.ex||"",
-newDef:newDef,
-newEx:newEx||""
+newDef,newEx
 }
 
-try{
-await fetch(API,{method:"POST",body:JSON.stringify(item)})
-}catch{
-queue.push(item)
-localStorage.setItem("queue",JSON.stringify(queue))
-}
+try{await fetch(API,{method:"POST",body:JSON.stringify(item)})}
+catch{queue.push(item)}
 
 d.def=newDef
 d.ex=newEx
 localStorage.setItem("words",JSON.stringify(data))
 render()
-}
-
-/* QUEUE */
-async function syncQueue(){
-if(!queue.length)return
-
-let newQ=[]
-for(let item of queue){
-try{
-await fetch(API,{method:"POST",body:JSON.stringify(item)})
-}catch{
-newQ.push(item)
-}
-}
-
-queue=newQ
-localStorage.setItem("queue",JSON.stringify(queue))
 }
 
 /* LOAD */
@@ -232,38 +198,84 @@ if(!data[w].some(d=>d.def===obj.def&&d.ex===obj.ex)){
 data[w].push(obj)
 }
 })
-
 setStatus("online","Online")
 }catch{
 setStatus("offline","Offline")
 }
 
-syncQueue()
 render()
+}
+
+/* UI */
+function formatText(t,id){
+if(t.length<120)return t
+return `<div id="${id}" class="clamp">${t}</div>
+<span class="link" onclick="toggleText('${id}',this)">Read more</span>`
+}
+
+function toggleText(id,b){
+let el=document.getElementById(id)
+el.classList.toggle("clamp")
+b.innerText=el.classList.contains("clamp")?"Read more":"Show less"
+}
+
+function renderDefs(arr,w){
+let first=formatText(arr[0].def,w)
+let rest=arr.slice(1).map((d,i)=>`<div>${d.def}</div>`).join("")
+if(arr.length==1)return first
+return `${first}<div class="more" id="g${w}">${rest}</div>
+<span class="link" onclick="toggle('${w}')">Show all</span>`
+}
+
+function toggle(w){
+document.getElementById("g"+w).classList.toggle("open")
 }
 
 /* RENDER */
 function render(){
 let s=search.value.toLowerCase()
-let list=Object.keys(data).filter(w=>w.includes(s)).reverse()
+let list=Object.keys(data).filter(w=>{
+return w.includes(s)||data[w].some(d=>d.def.toLowerCase().includes(s))
+}).reverse()
+
 count.innerText=list.length
 
+if(view==="table"){
 out.innerHTML="<table><tr><th>Word</th><th>Details</th><th></th></tr>"+
-list.map(w=>{
-let d=data[w].map(x=>x.def).join("<br>")
-return `<tr><td>${w}</td><td>${d}</td>
+list.map(w=>`
+<tr>
+<td>${w}</td>
+<td>${renderDefs(data[w],w)}</td>
 <td>
 <span onclick="editWord('${w}')">✏️</span>
 <span onclick="del('${w}')">❌</span>
-</td></tr>`
-}).join("")+"</table>"
+</td>
+</tr>`).join("")+"</table>"
+}else{
+out.innerHTML="<div class='cards'>"+
+list.map(w=>`
+<div class="card">
+<div class="word">${w}</div>
+${renderDefs(data[w],w)}
+<div class="actions">
+<span onclick="editWord('${w}')">✏️</span>
+<span onclick="del('${w}')">❌</span>
+</div>
+</div>`).join("")+"</div>"
+}
 }
 
-function setView(v){view=v;render()}
+function setView(v){
+view=v
+bt.classList.toggle("active",v==="table")
+bc.classList.toggle("active",v==="cards")
+render()
+}
+
 function clearAll(){input.value="";chat.value=""}
 
+/* START */
 load()
-setInterval(syncQueue,5000)
 </script>
 
 </body>
