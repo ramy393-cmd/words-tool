@@ -45,12 +45,26 @@ th,td{padding:10px;border-bottom:1px solid var(--border)}
 .card{background:var(--card);padding:12px;border-radius:10px;border:1px solid var(--border)}
 
 .word{color:var(--accent);font-weight:700}
+
 .clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .link{color:var(--accent);cursor:pointer;font-size:12px}
 .example{color:var(--gold);font-style:italic;margin-top:4px}
 .more{display:none}
 .more.open{display:block}
-.actions{display:flex;gap:10px}
+
+/* FIXES */
+.actions{
+display:flex;
+gap:10px;
+align-items:center;
+white-space:nowrap;
+}
+
+td, .word{
+word-break: break-word;
+overflow-wrap: anywhere;
+}
+
 </style>
 
 </head>
@@ -98,6 +112,16 @@ status.className="status "+c
 status.innerText=t
 }
 
+/* FIX TEXT */
+function safeText(t){
+return t
+.replace(/</g,"&lt;")
+.replace(/>/g,"&gt;")
+.replace(/"/g,"&quot;")
+.replace(/'/g,"&#39;")
+}
+
+/* SPEAK */
 function speak(word){
 const u=new SpeechSynthesisUtterance(word)
 u.lang="en-US"
@@ -204,8 +228,8 @@ render()
 }
 
 function formatText(t,id){
-if(t.length<120)return t
-return `<div id="${id}" class="clamp">${t}</div>
+if(t.length<120)return safeText(t)
+return `<div id="${id}" class="clamp">${safeText(t)}</div>
 <span class="link" onclick="toggleText('${id}',this)">Read more</span>`
 }
 
@@ -218,13 +242,13 @@ b.innerText=el.classList.contains("clamp")?"Read more":"Show less"
 function renderDefs(arr,w){
 let first=formatText(arr[0].def,w)
 let rest=arr.slice(1).map(d=>`
-<div>${d.def}${d.ex?`<div class="example">${d.ex}</div>`:""}</div>`).join("")
+<div>${safeText(d.def)}${d.ex?`<div class="example">${safeText(d.ex)}</div>`:""}</div>`).join("")
 
 if(arr.length==1){
-return first+(arr[0].ex?`<div class="example">${arr[0].ex}</div>`:"")
+return first+(arr[0].ex?`<div class="example">${safeText(arr[0].ex)}</div>`:"")
 }
 
-return `${first}${arr[0].ex?`<div class="example">${arr[0].ex}</div>`:""}
+return `${first}${arr[0].ex?`<div class="example">${safeText(arr[0].ex)}</div>`:""}
 <div class="more" id="g${w}">${rest}</div>
 <span class="link" onclick="toggle('${w}')">Show all</span>`
 }
@@ -246,24 +270,26 @@ if(view==="table"){
 out.innerHTML="<table><tr><th>Word</th><th>Details</th><th></th></tr>"+
 list.map(w=>`
 <tr>
-<td>${w}</td>
+<td class="word">${safeText(w)}</td>
 <td>${renderDefs(data[w],w)}</td>
 <td>
-<span onclick="speak('${w}')">🔊</span>
-<span onclick="editWord('${w}')">✏️</span>
-<span onclick="del('${w}')">❌</span>
+<div class="actions">
+<span onclick="speak('${safeText(w)}')">🔊</span>
+<span onclick="editWord('${safeText(w)}')">✏️</span>
+<span onclick="del('${safeText(w)}')">❌</span>
+</div>
 </td>
 </tr>`).join("")+"</table>"
 }else{
 out.innerHTML="<div class='cards'>"+
 list.map(w=>`
 <div class="card">
-<div class="word">${w}</div>
+<div class="word">${safeText(w)}</div>
 ${renderDefs(data[w],w)}
 <div class="actions">
-<span onclick="speak('${w}')">🔊</span>
-<span onclick="editWord('${w}')">✏️</span>
-<span onclick="del('${w}')">❌</span>
+<span onclick="speak('${safeText(w)}')">🔊</span>
+<span onclick="editWord('${safeText(w)}')">✏️</span>
+<span onclick="del('${safeText(w)}')">❌</span>
 </div>
 </div>`).join("")+"</div>"
 }
