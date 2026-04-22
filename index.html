@@ -7,66 +7,49 @@
 <title>Words Tool</title>
 
 <style>
+/* === SAME UI (NO CHANGE) === */
 :root{
 --bg:#060c18;--card:#0f1a2e;--border:#1e2d45;
 --accent:#38bdf8;--text:#e2e8f0;--muted:#64748b;--gold:#facc15;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:system-ui}
-
-/* header */
-.header{display:flex;justify-content:space-between;padding:14px;border-bottom:1px solid var(--border);background:#0a1324}
+.header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);background:#0a1324}
 .logo{color:var(--accent);font-weight:700}
-.status{padding:4px 10px;border-radius:999px;font-size:12px}
+.header-right{display:flex;align-items:center;gap:10px}
+.status{padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600}
 .online{background:#064e3b;color:#34d399}
+.offline{background:#450a0a;color:#f87171}
 .syncing{background:#422006;color:#facc15}
-.local{background:#450a0a;color:#f87171}
-
-/* layout */
+.local{background:#422006;color:#facc15}
 .container{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 50px)}
 @media(max-width:900px){.container{grid-template-columns:1fr}}
-
 .sidebar{padding:16px;background:#0a1324;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:10px}
 textarea,input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:white}
-
-button{padding:10px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
+button{padding:10px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
 .btn-primary{background:var(--accent);color:black}
 .btn-secondary{background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#000}
-
-/* main */
+.btn-danger{border:1px solid var(--border);color:var(--muted)}
 .main{display:flex;flex-direction:column}
-.toolbar{display:flex;gap:10px;padding:10px;border-bottom:1px solid var(--border)}
+.toolbar{display:flex;gap:10px;padding:12px;border-bottom:1px solid var(--border);background:#0a1324;flex-wrap:wrap}
 .toolbar input{flex:1}
-
-.view-btn{background:var(--card);border:1px solid var(--border);color:var(--muted)}
+.view-btn{padding:8px 12px;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer}
 .view-btn.active{background:var(--accent);color:black}
-
-/* content */
-.content{overflow:auto;padding:10px}
-
+.content{overflow:auto;padding:14px}
 table{width:100%;border-collapse:collapse}
-td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
-
-.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-@media(max-width:900px){.cards{grid-template-columns:1fr}}
-
-.card{background:var(--card);padding:10px;border-radius:8px;border:1px solid var(--border)}
-
+th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.cards{grid-template-columns:1fr}}
+.card{background:var(--card);padding:12px;border-radius:10px;border:1px solid var(--border)}
 .word{color:var(--accent);font-weight:700}
+.def{line-height:1.6}
+.clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.link{color:var(--accent);font-size:12px;cursor:pointer}
 .example{color:var(--gold);font-style:italic;margin-top:4px}
-.link{color:var(--accent);cursor:pointer;font-size:12px}
-
-.clamp{
-display:-webkit-box;
--webkit-box-orient:vertical;
--webkit-line-clamp:2;
-overflow:hidden;
-}
-
 .more{display:none}
 .more.open{display:block}
-
-.actions{display:flex;gap:10px;margin-top:6px}
+.actions{display:flex;gap:10px}
 .action{cursor:pointer}
 </style>
 
@@ -76,9 +59,9 @@ overflow:hidden;
 
 <div class="header">
 <div class="logo">Words Tool</div>
-<div>
-<span id="status" class="status syncing">Starting...</span>
-Words: <span id="count">0</span>
+<div class="header-right">
+<div id="status" class="status syncing">Starting...</div>
+<div>Words: <span id="count">0</span></div>
 </div>
 </div>
 
@@ -89,6 +72,7 @@ Words: <span id="count">0</span>
 <textarea id="chat" placeholder="definition | example"></textarea>
 <button class="btn-primary" onclick="save()">Save</button>
 <button class="btn-secondary" onclick="generate()">AI Prompt</button>
+<button class="btn-danger" onclick="clearAll()">Clear</button>
 </div>
 
 <div class="main">
@@ -97,121 +81,126 @@ Words: <span id="count">0</span>
 <button class="view-btn active" id="bt" onclick="setView('table')">Table</button>
 <button class="view-btn" id="bc" onclick="setView('cards')">Cards</button>
 </div>
-<div id="out" class="content"></div>
+<div class="content" id="out"></div>
 </div>
 
 </div>
 
 <script>
-const API="https://script.google.com/macros/s/AKfycbzBxSmtkwsvkhQ-n7YgJVHEVGxwnnu6bcT0sZxGh7zb_4Q9j4j_tPTGJaZSriX5gb4K/exec";
+const API="https://script.google.com/macros/s/AKfycbzBxSmtkwsvkhQ-n7YgJVHEVGxwnnu6bcT0sZxGh7zb_4Q9j4j_tPTGJaZSriX5gb4K/exec"
 
 let data={}
 let queue=JSON.parse(localStorage.getItem("queue")||"[]")
-let synced=JSON.parse(localStorage.getItem("synced")||"[]")
 let view="table"
 let retryTimer=null
 let chatTab=null
 
-const $=id=>document.getElementById(id)
-
-/* STATUS */
-function setStatus(c,t){$("status").className="status "+c;$("status").innerText=t}
+function setStatus(t,x){
+let s=document.getElementById("status")
+s.className="status "+t
+s.innerText=x
+}
 
 /* PROMPT */
-function generate(){
-let text=$("input").value.trim()
-let prompt=`For each word return:
+function buildPrompt(){
+let words=input.value.trim()
+if(!words) return "Give definitions and examples"
+return `For each word return EXACTLY:
 definition | example
 
-${text}`
-navigator.clipboard.writeText(prompt)
-window.open("https://chat.openai.com","_blank")
+${words}`
+}
+
+async function generate(){
+let p=buildPrompt()
+try{await navigator.clipboard.writeText(p)}catch{}
+if(!chatTab||chatTab.closed){
+chatTab=window.open("https://chat.openai.com","_blank")
+}else chatTab.focus()
 }
 
 /* PARSE */
 function parse(t){
 if(!t)return{def:"",ex:""}
-if(t.includes("|")){let[d,...r]=t.split("|");return{def:d.trim(),ex:r.join("|").trim()}}
-if(t.includes("--")){let[d,...r]=t.split("--");return{def:d.trim(),ex:r.join("--").trim()}}
+if(t.includes("|")){
+let a=t.split("|")
+return{def:a[0].trim(),ex:a.slice(1).join("|").trim()}
+}
+if(t.includes("--")){
+let a=t.split("--")
+return{def:a[0].trim(),ex:a.slice(1).join("--").trim()}
+}
 return{def:t.trim(),ex:""}
 }
 
 /* SAVE */
 async function save(){
 setStatus("syncing","Syncing...")
-let w=$("input").value.split("\n").filter(Boolean)
-let l=$("chat").value.split("\n").filter(Boolean)
 
-let batch=[]
-let changed=false
+let w=input.value.split("\n").map(x=>x.trim()).filter(Boolean)
+let l=chat.value.split("\n")
 
 for(let i=0;i<w.length;i++){
-let word=w[i].toLowerCase().trim()
-if(!word)continue
+let word=w[i].toLowerCase()
+if(!word) continue
+
 let p=parse(l[i]||"")
 
 if(!data[word])data[word]=[]
 
 if(!data[word].some(d=>d.def===p.def&&d.ex===p.ex)){
 data[word].push(p)
-changed=true
 
-let item={word,definition:p.def,example:p.ex,id:word+"|"+p.def+"|"+p.ex}
-if(!synced.includes(item.id))batch.push(item)
-}
-}
-
-if(!batch.length){setStatus("online","Up to date");return}
+let item={action:"save",word,definition:p.def,example:p.ex}
 
 try{
-await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"batch",items:batch})})
-synced=[...new Set([...synced,...batch.map(i=>i.id)])]
-localStorage.setItem("synced",JSON.stringify(synced))
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
 setStatus("online","Online")
 }catch{
-queue.push(...batch)
+if(!queue.some(q=>q.word===item.word&&q.definition===item.definition)){
+queue.push(item)
 localStorage.setItem("queue",JSON.stringify(queue))
+}
 setStatus("local","Saved locally")
 }
+}
+}
 
-if(changed){
 localStorage.setItem("words",JSON.stringify(data))
 render()
-}
 }
 
 /* TEXT */
 function formatText(t,id){
 if(!t)return""
-if(t.length<100)return t
-return `<div id="${id}" class="clamp">${t}</div>
-<span class="link" onclick="toggleText('${id}',this)">Read more</span>`
+let short=t.length>120
+return `<div><div class="def ${short?'clamp':''}" id="${id}">${t}</div>
+${short?`<span class="link" onclick="toggleText('${id}',this)">Read more</span>`:""}</div>`
 }
 
-function toggleText(id,btn){
+function toggleText(id,b){
 let el=document.getElementById(id)
 el.classList.toggle("clamp")
-btn.innerText=el.classList.contains("clamp")?"Read more":"Show less"
+b.innerText=el.classList.contains("clamp")?"Read more":"Show less"
 }
 
-/* DEFINITIONS */
+/* DEFS */
 function renderDefs(arr,w){
-let first=arr[0]
-let html=formatText(first.def,w+"0")
-if(first.ex)html+=`<div class="example">${first.ex}</div>`
+function block(d,i){
+return `<div>${formatText(d.def,w+i)}${d.ex?`<div class="example">${d.ex}</div>`:""}</div>`
+}
+let first=block(arr[0],0)
+if(arr.length===1)return first
 
-if(arr.length>1){
-let rest=arr.slice(1).map((d,i)=>formatText(d.def,w+i+1)).join("")
-html+=`<div id="g${w}" class="more">${rest}</div>
+let rest=arr.slice(1).map((d,i)=>block(d,i+1)).join("")
+return `${first}<div class="more" id="g${w}">${rest}</div>
 <span class="link" onclick="toggle('g${w}',this)">Show all +${arr.length-1}</span>`
 }
-return html
-}
 
-function toggle(id,btn){
+function toggle(id,b){
 let el=document.getElementById(id)
 el.classList.toggle("open")
-btn.innerText=el.classList.contains("open")?"Hide":"Show all"
+b.innerText=el.classList.contains("open")?"Hide":"Show all"
 }
 
 /* LOAD */
@@ -225,19 +214,15 @@ try{
 let r=await fetch(API+"?action=getAll",{cache:"no-store"})
 let j=await r.json()
 
-if(j.data){
-j.data.forEach(i=>{
+j.data?.forEach(i=>{
 let w=i.word.toLowerCase()
 if(!data[w])data[w]=[]
-let obj={def:i.definition,ex:i.example}
+let obj={def:i.definition||"",ex:i.example||""}
 if(!data[w].some(d=>d.def===obj.def&&d.ex===obj.ex)){
 data[w].push(obj)
 }
 })
-}
 
-setStatus("online","Online")
-await syncQueue()
 setStatus("online","Online")
 
 }catch{
@@ -245,76 +230,73 @@ setStatus("local","API Error")
 startRetry()
 }
 
+syncQueue()
 render()
 }
 
-/* QUEUE */
-function startRetry(){if(retryTimer)return;retryTimer=setInterval(load,5000)}
+function startRetry(){
+if(retryTimer)return
+retryTimer=setInterval(load,5000)
+}
 
+/* QUEUE */
 async function syncQueue(){
 if(!queue.length)return
 setStatus("syncing","Syncing...")
+
 let newQ=[]
 for(let item of queue){
 try{
-await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(item)})
-}catch{newQ.push(item)}
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
+}catch{
+newQ.push(item)
+}
 }
 queue=newQ
 localStorage.setItem("queue",JSON.stringify(queue))
-if(queue.length)setStatus("syncing","Retrying...")
-else setStatus("online","Online")
+setStatus("online","Online")
 }
 
 /* RENDER */
 function render(){
-let s=$("search").value.toLowerCase()
+let s=search.value.toLowerCase()
 let list=Object.keys(data).filter(w=>{
 return w.includes(s)||data[w].some(d=>d.def.toLowerCase().includes(s)||d.ex.toLowerCase().includes(s))
 }).reverse()
 
-$("count").innerText=list.length
+count.innerText=list.length
 
 if(view==="table"){
-let html="<table>"
+let h="<table><tr><th>Word</th><th>Details</th><th>Actions</th></tr>"
 list.forEach(w=>{
-html+=`<tr>
-<td>${w}</td>
-<td>${renderDefs(data[w],w)}</td>
-<td>
-<div class="actions">
-<span class="action" onclick="speechSynthesis.speak(new SpeechSynthesisUtterance('${w}'))">🔊</span>
-<span class="action" onclick="editWord('${w}')">✏️</span>
-<span class="action" onclick="del('${w}')">❌</span>
-</div>
-</td>
-</tr>`
+h+=`<tr><td>${w}</td><td>${renderDefs(data[w],w)}</td>
+<td><div class="actions">
+<span onclick="speak('${w}')">🔊</span>
+<span onclick="editWord('${w}')">✏️</span>
+<span onclick="del('${w}')">❌</span>
+</div></td></tr>`
 })
-html+="</table>"
-$("out").innerHTML=html
-
+out.innerHTML=h+"</table>"
 }else{
-let html="<div class='cards'>"
+let h="<div class='cards'>"
 list.forEach(w=>{
-html+=`<div class="card">
-<div class="word">${w}</div>
+h+=`<div class="card"><div class="word">${w}</div>
 ${renderDefs(data[w],w)}
 <div class="actions">
-<span class="action" onclick="speechSynthesis.speak(new SpeechSynthesisUtterance('${w}'))">🔊</span>
-<span class="action" onclick="editWord('${w}')">✏️</span>
-<span class="action" onclick="del('${w}')">❌</span>
-</div>
-</div>`
+<span onclick="speak('${w}')">🔊</span>
+<span onclick="editWord('${w}')">✏️</span>
+<span onclick="del('${w}')">❌</span>
+</div></div>`
 })
-html+="</div>"
-$("out").innerHTML=html
+out.innerHTML=h+"</div>"
 }
 }
 
 /* ACTIONS */
+function speak(w){speechSynthesis.speak(new SpeechSynthesisUtterance(w))}
 function editWord(w){
 let n=prompt("Edit",data[w][0].def)
-if(n){data[w][0].def=n;localStorage.setItem("words",JSON.stringify(data));render()}
+if(n!==null){data[w][0].def=n;localStorage.setItem("words",JSON.stringify(data));render()}
 }
 function del(w){
 delete data[w]
@@ -322,23 +304,20 @@ localStorage.setItem("words",JSON.stringify(data))
 render()
 }
 
-/* EVENTS */
-$("search").oninput=()=>render()
-
-function setView(v){
-view=v
-$("bt").classList.toggle("active",v==="table")
-$("bc").classList.toggle("active",v==="cards")
-render()
-}
+search.oninput=()=>render()
+function setView(v){view=v;bt.classList.toggle("active",v==="table");bc.classList.toggle("active",v==="cards");render()}
+function clearAll(){input.value="";chat.value=""}
 
 window.addEventListener("online",load)
-window.addEventListener("offline",()=>setStatus("local","Offline"))
+window.addEventListener("offline",()=>setStatus("offline","Offline"))
 
 load()
 
+/* FIX Starting */
 window.addEventListener("load",()=>{
-setTimeout(()=>setStatus("online","Online"),1500)
+setTimeout(()=>{
+if(status.innerText==="Starting...") setStatus("online","Online")
+},1500)
 })
 </script>
 
