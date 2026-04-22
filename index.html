@@ -75,7 +75,7 @@ th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
 
 <div class="main">
 <div class="toolbar">
-<input id="search" placeholder="Search...">
+<input id="search" placeholder="Search..." oninput="render()">
 <button class="view-btn active" id="bt" onclick="setView('table')">Table</button>
 <button class="view-btn" id="bc" onclick="setView('cards')">Cards</button>
 </div>
@@ -90,78 +90,55 @@ const API="https://script.google.com/macros/s/AKfycbyrFf5fgB7FuCZgQ92IY9qPZLeszi
 let data={}
 let queue=JSON.parse(localStorage.getItem("queue")||"[]")
 let view="table"
-let retryTimer=null
-let chatTab=null
 
+/* STATUS */
 function setStatus(t,x){
 let s=document.getElementById("status")
 s.className="status "+t
 s.innerText=x
 }
 
-/* PROMPT */
-function buildPrompt(){
-let words=input.value.trim()
-if(!words) return "Give definitions and examples"
-return `For each word return EXACTLY:
-definition | example
-
-${words}`
+/* LOAD */
+async function load(){
+setStatus("syncing","Loading...")
+try{
+let res=await fetch(API+"?action=getAll")
+let json=await res.json()
+data={}
+json.data.forEach(r=>{
+let w=r.word.toLowerCase()
+if(!data[w])data[w]=[]
+data[w].push({def:r.definition||"",ex:r.example||""})
+})
+localStorage.setItem("words",JSON.stringify(data))
+setStatus("online","Online")
+}catch{
+data=JSON.parse(localStorage.getItem("words")||"{}")
+setStatus("offline","Offline")
+}
+render()
 }
 
-async function generate(){
-let p=buildPrompt()
-try{await navigator.clipboard.writeText(p)}catch{}
-if(!chatTab||chatTab.closed){
-chatTab=window.open("https://chat.openai.com","_blank")
-}else chatTab.focus()
-}
-
-/* PARSE */
-function parse(t){
-if(!t)return{def:"",ex:""}
-if(t.includes("|")){
-let a=t.split("|")
-return{def:a[0].trim(),ex:a.slice(1).join("|").trim()}
-}
-if(t.includes("--")){
-let a=t.split("--")
-return{def:a[0].trim(),ex:a.slice(1).join("--").trim()}
-}
-return{def:t.trim(),ex:""}
-}
-
-/* SAVE (FIXED) */
+/* SAVE */
 async function save(){
-setStatus("syncing","Syncing...")
-
-let w=input.value.split("\n").map(x=>x.trim()).filter(Boolean)
+let w=input.value.split("\n").filter(Boolean)
 let l=chat.value.split("\n")
-
 let batch=[]
 
-for(let i=0;i<w.length;i++){
-let word=w[i].toLowerCase()
-if(!word) continue
-
+w.forEach((word,i)=>{
 let p=parse(l[i]||"")
-
+word=word.toLowerCase()
 if(!data[word])data[word]=[]
-
-if(!data[word].some(d=>d.def===p.def&&d.ex===p.ex)){
 data[word].push(p)
 batch.push({word,definition:p.def,example:p.ex})
-}
-}
+})
 
-if(batch.length){
+localStorage.setItem("words",JSON.stringify(data))
+
 try{
 await fetch(API,{
 method:"POST",
-body:JSON.stringify({
-action:"batch",
-items:batch
-}),
+body:JSON.stringify({action:"batch",items:batch}),
 mode:"no-cors"
 })
 setStatus("online","Online")
@@ -170,36 +147,100 @@ queue.push(...batch)
 localStorage.setItem("queue",JSON.stringify(queue))
 setStatus("local","Saved locally")
 }
+
+render()
 }
 
+/* QUEUE */
+setInterval(async()=>{
+if(!queue.length)return
+let q=[...queue]
+queue=[]
+localStorage.setItem("queue",JSON.stringify(queue))
+await fetch(API,{
+method:"POST",
+body:JSON.stringify({action:"batch",items:q}),
+mode:"no-cors"
+})
+},5000)
+
+/* PARSE */
+function parse(t){
+if(t.includes("|")){
+let a=t.split("|")
+return{def:a[0].trim(),ex:a[1]?.trim()||""}
+}
+return{def:t.trim(),ex:""}
+}
+
+/* RENDER */
+function render(){
+let out=document.getElementById("out")
+let s=document.getElementById("search").value.toLowerCase()
+let words=Object.keys(data).filter(w=>w.includes(s))
+document.getElementById("count").innerText=words.length
+
+if(view==="table"){
+out.innerHTML=`<table>
+<tr><th>Word</th><th>Details</th><th></th></tr>
+${
+words.map(w=>{
+let d=data[w].map(x=>x.def).join("<br>")
+return `<tr>
+<td>${w}</td>
+<td>${d}</td>
+<td class="actions">
+<span onclick="speak('${w}')">🔊</span>
+<span onclick="del('${w}')">❌</span>
+</td>
+</tr>`
+}).join("")
+}
+</table>`
+}else{
+out.innerHTML=`<div class="cards">
+${
+words.map(w=>{
+let d=data[w][0]
+return `<div class="card">
+<div class="word">${w}</div>
+<div class="def clamp">${d.def}</div>
+<div class="example">${d.ex||""}</div>
+</div>`
+}).join("")
+}
+</div>`
+}
+}
+
+/* VIEW */
+function setView(v){
+view=v
+bt.classList.toggle("active",v==="table")
+bc.classList.toggle("active",v==="cards")
+render()
+}
+
+/* SPEAK */
+function speak(t){
+speechSynthesis.speak(new SpeechSynthesisUtterance(t))
+}
+
+/* DELETE */
+function del(w){
+delete data[w]
 localStorage.setItem("words",JSON.stringify(data))
 render()
 }
 
-/* QUEUE (FIXED) */
-async function syncQueue(){
-if(!queue.length)return
-setStatus("syncing","Syncing...")
+/* CLEAR */
+function clearAll(){
+input.value=""
+chat.value=""
+}
 
-let newQ=[]
-for(let item of queue){
-try{
-await fetch(API,{
-method:"POST",
-body:JSON.stringify({
-action:"batch",
-items:[item]
-}),
-mode:"no-cors"
-})
-}catch{
-newQ.push(item)
-}
-}
-queue=newQ
-localStorage.setItem("queue",JSON.stringify(queue))
-setStatus("online","Online")
-}
+/* INIT */
+load()
 </script>
 
 </body>
