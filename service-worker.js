@@ -9,7 +9,6 @@ const ASSETS = [
   "./icon-512.png"
 ];
 
-/* INSTALL */
 self.addEventListener("install", e => {
   self.skipWaiting();
   e.waitUntil(
@@ -17,31 +16,20 @@ self.addEventListener("install", e => {
   );
 });
 
-/* ACTIVATE */
 self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(
-        keys.map(k => {
-          if (k !== CACHE_NAME) return caches.delete(k);
-        })
-      )
+      Promise.all(keys.map(k => k !== CACHE_NAME && caches.delete(k)))
     )
   );
   self.clients.claim();
 });
 
-/* FETCH */
 self.addEventListener("fetch", e => {
-
-  // ❌ سيب Google Script API يشتغل عادي بدون كاش
   if (e.request.url.includes("script.google.com")) return;
 
   e.respondWith(
-    caches.match(e.request).then(res => {
-      return res || fetch(e.request);
-    })
+    caches.match(e.request).then(res => res || fetch(e.request))
   );
-
 });
 ```
