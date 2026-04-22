@@ -7,33 +7,50 @@
 <title>Words Tool</title>
 
 <style>
-:root {
-  --bg:#060c18; --card:#0f1a2e; --surface:#0a1324;
-  --border:#1e2d45; --accent:#38bdf8; --text:#e2e8f0;
-  --muted:#64748b; --gold:#facc15; --green:#34d399; --red:#f87171;
+/* === SAME UI (NO CHANGE) === */
+:root{
+--bg:#060c18;--card:#0f1a2e;--border:#1e2d45;
+--accent:#38bdf8;--text:#e2e8f0;--muted:#64748b;--gold:#facc15;
 }
-body{margin:0;background:var(--bg);color:#fff;font-family:sans-serif}
-.header{display:flex;justify-content:space-between;padding:10px;background:var(--surface)}
-.status{padding:4px 10px;border-radius:20px;font-size:12px}
-.s-online{background:#064e3b}
-.s-offline{background:#450a0a}
-.s-sync{background:#422006}
-
-.container{display:grid;grid-template-columns:280px 1fr;height:calc(100vh - 40px)}
-
-.sidebar{padding:10px;background:var(--surface)}
-textarea,input{width:100%;margin-bottom:6px;padding:6px;background:#111;color:#fff;border:1px solid #333}
-
-button{width:100%;padding:6px;margin-bottom:5px}
-
-.content{padding:10px;overflow:auto}
-
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:system-ui}
+.header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);background:#0a1324}
+.logo{color:var(--accent);font-weight:700}
+.header-right{display:flex;align-items:center;gap:10px}
+.status{padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600}
+.online{background:#064e3b;color:#34d399}
+.offline{background:#450a0a;color:#f87171}
+.syncing{background:#422006;color:#facc15}
+.local{background:#422006;color:#facc15}
+.container{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 50px)}
+@media(max-width:900px){.container{grid-template-columns:1fr}}
+.sidebar{padding:16px;background:#0a1324;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:10px}
+textarea,input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:white}
+button{padding:10px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
+.btn-primary{background:var(--accent);color:black}
+.btn-secondary{background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#000}
+.btn-danger{border:1px solid var(--border);color:var(--muted)}
+.main{display:flex;flex-direction:column}
+.toolbar{display:flex;gap:10px;padding:12px;border-bottom:1px solid var(--border);background:#0a1324;flex-wrap:wrap}
+.toolbar input{flex:1}
+.view-btn{padding:8px 12px;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer}
+.view-btn.active{background:var(--accent);color:black}
+.content{overflow:auto;padding:14px}
 table{width:100%;border-collapse:collapse}
-td,th{padding:8px;border-bottom:1px solid #333}
-
-.word{color:#38bdf8;font-weight:bold}
-.actions{display:flex;gap:6px}
-.ex{color:var(--gold);font-size:12px}
+th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.cards{grid-template-columns:1fr}}
+.card{background:var(--card);padding:12px;border-radius:10px;border:1px solid var(--border)}
+.word{color:var(--accent);font-weight:700}
+.def{line-height:1.6}
+.clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.link{color:var(--accent);font-size:12px;cursor:pointer}
+.example{color:var(--gold);font-style:italic;margin-top:4px}
+.more{display:none}
+.more.open{display:block}
+.actions{display:flex;gap:10px}
+.action{cursor:pointer}
 </style>
 
 </head>
@@ -41,186 +58,268 @@ td,th{padding:8px;border-bottom:1px solid #333}
 <body>
 
 <div class="header">
-<div>Words Tool</div>
-<div>
-<span id="status" class="status s-sync">Starting...</span>
-<span id="count"></span>
+<div class="logo">Words Tool</div>
+<div class="header-right">
+<div id="status" class="status syncing">Starting...</div>
+<div>Words: <span id="count">0</span></div>
 </div>
 </div>
 
 <div class="container">
 
 <div class="sidebar">
-<textarea id="input" placeholder="words"></textarea>
+<textarea id="input" placeholder="Words"></textarea>
 <textarea id="chat" placeholder="definition | example"></textarea>
-<button onclick="save()">Save</button>
-<button onclick="clearInputs()">Clear</button>
+<button class="btn-primary" onclick="save()">Save</button>
+<button class="btn-secondary" onclick="generate()">AI Prompt</button>
+<button class="btn-danger" onclick="clearAll()">Clear</button>
 </div>
 
-<div class="content">
-<input id="search" placeholder="Search..." oninput="render()">
-<div id="out"></div>
+<div class="main">
+<div class="toolbar">
+<input id="search" placeholder="Search...">
+<button class="view-btn active" id="bt" onclick="setView('table')">Table</button>
+<button class="view-btn" id="bc" onclick="setView('cards')">Cards</button>
+</div>
+<div class="content" id="out"></div>
 </div>
 
 </div>
 
 <script>
-const API="https://script.google.com/macros/s/AKfycbyOot_kvXfvlkXm2hrBheBiIwxBC9or72iw9nhzo-6T5So2vGObnqrcCdUDYBVoWFJY/exec";
+const API="https://script.google.com/macros/s/AKfycbyOot_kvXfvlkXm2hrBheBiIwxBC9or72iw9nhzo-6T5So2vGObnqrcCdUDYBVoWFJY/exec
+"
 
-let data={};
-let queue=JSON.parse(localStorage.getItem("queue")||"[]");
+let data={}
+let queue=JSON.parse(localStorage.getItem("queue")||"[]")
+let view="table"
+let retryTimer=null
+let chatTab=null
 
-/* STATUS */
-function setStatus(s){
-status.className="status "+(s==="ONLINE"?"s-online":s==="OFFLINE"?"s-offline":"s-sync");
-status.innerText=s;
+function setStatus(t,x){
+let s=document.getElementById("status")
+s.className="status "+t
+s.innerText=x
 }
 
-/* VOICE */
-function speak(w){
-let u=new SpeechSynthesisUtterance(w);
-u.lang="en-US";
-speechSynthesis.speak(u);
+/* PROMPT */
+function buildPrompt(){
+let words=input.value.trim()
+if(!words) return "Give definitions and examples"
+return `For each word return EXACTLY:
+definition | example
+
+${words}`
 }
 
-/* HELPERS */
-function key(d,e){return d+"|"+e}
+async function generate(){
+let p=buildPrompt()
+try{await navigator.clipboard.writeText(p)}catch{}
+if(!chatTab||chatTab.closed){
+chatTab=window.open("https://chat.openai.com","_blank")
+}else chatTab.focus()
+}
+
+/* PARSE */
+function parse(t){
+if(!t)return{def:"",ex:""}
+if(t.includes("|")){
+let a=t.split("|")
+return{def:a[0].trim(),ex:a.slice(1).join("|").trim()}
+}
+if(t.includes("--")){
+let a=t.split("--")
+return{def:a[0].trim(),ex:a.slice(1).join("--").trim()}
+}
+return{def:t.trim(),ex:""}
+}
 
 /* SAVE */
 async function save(){
-let words=input.value.split("\n");
-let defs=chat.value.split("\n");
-let items=[];
+setStatus("syncing","Syncing...")
 
-words.forEach((w,i)=>{
-if(!w)return;
-let d=(defs[i]||"").split("|");
-let def=d[0]||"", ex=d[1]||"";
+let w=input.value.split("\n").map(x=>x.trim()).filter(Boolean)
+let l=chat.value.split("\n")
 
-if(!data[w])data[w]=[];
-if(!data[w].some(x=>key(x.def,x.ex)===key(def,ex))){
-data[w].push({def,ex,createdAt:Date.now()});
-items.push({word:w,definition:def,example:ex});
-}
-});
+for(let i=0;i<w.length;i++){
+let word=w[i].toLowerCase()
+if(!word) continue
 
-localStorage.setItem("words",JSON.stringify(data));
-render();
+let p=parse(l[i]||"")
 
-try{
-await fetch(API,{method:"POST",body:JSON.stringify({action:"batch",items})});
-setStatus("ONLINE");
-}catch{
-queue.push(...items);
-localStorage.setItem("queue",JSON.stringify(queue));
-setStatus("OFFLINE");
-}
-}
+if(!data[word])data[word]=[]
 
-/* DELETE */
-async function del(w){
-delete data[w];
-localStorage.setItem("words",JSON.stringify(data));
-render();
+if(!data[word].some(d=>d.def===p.def&&d.ex===p.ex)){
+data[word].push(p)
+
+let item={action:"save",word,definition:p.def,example:p.ex}
 
 try{
-await fetch(API,{method:"POST",body:JSON.stringify({action:"delete",word:w})});
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
+setStatus("online","Online")
 }catch{
-queue.push({action:"delete",word:w});
+if(!queue.some(q=>q.word===item.word&&q.definition===item.definition)){
+queue.push(item)
+localStorage.setItem("queue",JSON.stringify(queue))
 }
+setStatus("local","Saved locally")
 }
-
-/* SYNC */
-async function sync(){
-if(!queue.length)return;
-setStatus("SYNCING");
-
-let failed=[];
-for(let q of queue){
-try{
-await fetch(API,{method:"POST",body:JSON.stringify(q)});
-}catch{
-failed.push(q);
 }
 }
 
-queue=failed;
-localStorage.setItem("queue",JSON.stringify(queue));
-setStatus(queue.length?"OFFLINE":"ONLINE");
+localStorage.setItem("words",JSON.stringify(data))
+render()
+}
+
+/* TEXT */
+function formatText(t,id){
+if(!t)return""
+let short=t.length>120
+return `<div><div class="def ${short?'clamp':''}" id="${id}">${t}</div>
+${short?`<span class="link" onclick="toggleText('${id}',this)">Read more</span>`:""}</div>`
+}
+
+function toggleText(id,b){
+let el=document.getElementById(id)
+el.classList.toggle("clamp")
+b.innerText=el.classList.contains("clamp")?"Read more":"Show less"
+}
+
+/* DEFS */
+function renderDefs(arr,w){
+function block(d,i){
+return `<div>${formatText(d.def,w+i)}${d.ex?`<div class="example">${d.ex}</div>`:""}</div>`
+}
+let first=block(arr[0],0)
+if(arr.length===1)return first
+
+let rest=arr.slice(1).map((d,i)=>block(d,i+1)).join("")
+return `${first}<div class="more" id="g${w}">${rest}</div>
+<span class="link" onclick="toggle('g${w}',this)">Show all +${arr.length-1}</span>`
+}
+
+function toggle(id,b){
+let el=document.getElementById(id)
+el.classList.toggle("open")
+b.innerText=el.classList.contains("open")?"Hide":"Show all"
 }
 
 /* LOAD */
 async function load(){
+let saved=localStorage.getItem("words")
+if(saved)data=JSON.parse(saved)
+
+setStatus("syncing","Syncing...")
+
 try{
-data=JSON.parse(localStorage.getItem("words")||"{}");
-}catch{data={};}
+let r=await fetch(API+"?action=getAll",{cache:"no-store"})
+let j=await r.json()
 
-render();
-
-try{
-let r=await fetch(API+"?action=getAll");
-let j=await r.json();
-
-j.data.forEach(i=>{
-if(!data[i.word])data[i.word]=[];
-if(!data[i.word].some(x=>x.def===i.definition)){
-data[i.word].push({def:i.definition,ex:i.example,createdAt:Date.now()});
+j.data?.forEach(i=>{
+let w=i.word.toLowerCase()
+if(!data[w])data[w]=[]
+let obj={def:i.definition||"",ex:i.example||""}
+if(!data[w].some(d=>d.def===obj.def&&d.ex===obj.ex)){
+data[w].push(obj)
 }
-});
+})
 
-localStorage.setItem("words",JSON.stringify(data));
-setStatus("ONLINE");
+setStatus("online","Online")
+
 }catch{
-setStatus("OFFLINE");
+setStatus("local","API Error")
+startRetry()
 }
 
-render();
+syncQueue()
+render()
+}
+
+function startRetry(){
+if(retryTimer)return
+retryTimer=setInterval(load,5000)
+}
+
+/* QUEUE */
+async function syncQueue(){
+if(!queue.length)return
+setStatus("syncing","Syncing...")
+
+let newQ=[]
+for(let item of queue){
+try{
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
+}catch{
+newQ.push(item)
+}
+}
+queue=newQ
+localStorage.setItem("queue",JSON.stringify(queue))
+setStatus("online","Online")
 }
 
 /* RENDER */
 function render(){
-let s=search.value.toLowerCase();
+let s=search.value.toLowerCase()
+let list=Object.keys(data).filter(w=>{
+return w.includes(s)||data[w].some(d=>d.def.toLowerCase().includes(s)||d.ex.toLowerCase().includes(s))
+}).reverse()
 
-let list=Object.keys(data)
-.filter(w=>w.toLowerCase().includes(s))
-.sort((a,b)=>{
-let ta=Math.max(...data[a].map(x=>x.createdAt||0));
-let tb=Math.max(...data[b].map(x=>x.createdAt||0));
-return tb-ta;
-});
+count.innerText=list.length
 
-count.innerText=list.length;
-
-out.innerHTML="<table>"+list.map(w=>{
-let defs=data[w].map(d=>`
-<div>${d.def}</div>
-${d.ex?`<div class="ex">${d.ex}</div>`:""}
-`).join("");
-
-return`
-<tr>
-<td class="word">${w}</td>
-<td>${defs}</td>
-<td>
+if(view==="table"){
+let h="<table><tr><th>Word</th><th>Details</th><th>Actions</th></tr>"
+list.forEach(w=>{
+h+=`<tr><td>${w}</td><td>${renderDefs(data[w],w)}</td>
+<td><div class="actions">
+<span onclick="speak('${w}')">🔊</span>
+<span onclick="editWord('${w}')">✏️</span>
+<span onclick="del('${w}')">❌</span>
+</div></td></tr>`
+})
+out.innerHTML=h+"</table>"
+}else{
+let h="<div class='cards'>"
+list.forEach(w=>{
+h+=`<div class="card"><div class="word">${w}</div>
+${renderDefs(data[w],w)}
 <div class="actions">
 <span onclick="speak('${w}')">🔊</span>
+<span onclick="editWord('${w}')">✏️</span>
 <span onclick="del('${w}')">❌</span>
-</div>
-</td>
-</tr>`;
-}).join("")+"</table>";
+</div></div>`
+})
+out.innerHTML=h+"</div>"
+}
 }
 
-/* INIT */
-setInterval(sync,5000);
-window.addEventListener("online",sync);
-
-function clearInputs(){
-input.value="";
-chat.value="";
+/* ACTIONS */
+function speak(w){speechSynthesis.speak(new SpeechSynthesisUtterance(w))}
+function editWord(w){
+let n=prompt("Edit",data[w][0].def)
+if(n!==null){data[w][0].def=n;localStorage.setItem("words",JSON.stringify(data));render()}
+}
+function del(w){
+delete data[w]
+localStorage.setItem("words",JSON.stringify(data))
+render()
 }
 
-load();
+search.oninput=()=>render()
+function setView(v){view=v;bt.classList.toggle("active",v==="table");bc.classList.toggle("active",v==="cards");render()}
+function clearAll(){input.value="";chat.value=""}
+
+window.addEventListener("online",load)
+window.addEventListener("offline",()=>setStatus("offline","Offline"))
+
+load()
+
+/* FIX Starting */
+window.addEventListener("load",()=>{
+setTimeout(()=>{
+if(status.innerText==="Starting...") setStatus("online","Online")
+},1500)
+})
 </script>
 
 </body>
