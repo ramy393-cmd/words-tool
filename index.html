@@ -7,24 +7,43 @@
 <title>Words Tool</title>
 
 <style>
-body{background:#060c18;color:#e2e8f0;font-family:system-ui;margin:0}
-.header{display:flex;justify-content:space-between;padding:12px;background:#0a1324}
+:root {
+  --bg:#060c18; --card:#0f1a2e; --surface:#0a1324;
+  --border:#1e2d45; --accent:#38bdf8; --text:#e2e8f0;
+  --muted:#64748b; --gold:#facc15; --green:#34d399; --red:#f87171;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:system-ui;height:100vh;display:flex;flex-direction:column}
+
+.header{display:flex;justify-content:space-between;padding:10px 15px;background:var(--surface);border-bottom:1px solid var(--border)}
 .status{padding:4px 10px;border-radius:20px;font-size:12px}
-.online{background:#064e3b;color:#34d399}
-.offline{background:#450a0a;color:#f87171}
-.syncing{background:#422006;color:#facc15}
-.local{background:#422006;color:#facc15}
+.s-online{background:#064e3b;color:#34d399}
+.s-offline{background:#450a0a;color:#f87171}
+.s-syncing{background:#422006;color:#facc15}
+.s-pending{background:#422006;color:#facc15}
 
-.container{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 50px)}
-.sidebar{padding:10px;background:#0a1324}
-textarea,input{width:100%;margin-bottom:8px;padding:8px;background:#0f1a2e;color:#fff;border:1px solid #1e2d45}
-button{padding:8px;width:100%;margin-bottom:5px}
+.container{display:grid;grid-template-columns:280px 1fr;flex:1}
+.sidebar{padding:10px;background:var(--surface)}
+textarea,input{width:100%;margin-bottom:8px;padding:8px;background:var(--card);color:#fff;border:1px solid var(--border)}
 
-.actions{display:flex;gap:8px;align-items:center}
-.word{white-space:nowrap;color:#38bdf8}
+button{width:100%;padding:8px;margin-bottom:6px;cursor:pointer}
 
-table{width:100%;border-collapse:collapse}
-td,th{padding:8px;border-bottom:1px solid #1e2d45}
+.main{display:flex;flex-direction:column}
+.toolbar{display:flex;padding:10px;border-bottom:1px solid var(--border)}
+.toolbar input{flex:1}
+
+.content{overflow:auto;padding:10px}
+
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+td,th{padding:8px;border-bottom:1px solid var(--border)}
+
+.word{color:#38bdf8;font-weight:bold;word-break:break-word}
+
+.actions{display:flex;gap:6px}
+.actions span{cursor:pointer}
+
+.def{word-break:break-word}
+.ex{color:var(--gold);font-size:12px}
 </style>
 
 </head>
@@ -32,179 +51,252 @@ td,th{padding:8px;border-bottom:1px solid #1e2d45}
 <body>
 
 <div class="header">
-<div>Words Tool</div>
-<div>
-<span id="status" class="status syncing">Starting...</span>
-<span id="count"></span>
-</div>
+  <div>Words Tool</div>
+  <div>
+    <span id="status" class="status s-syncing">Starting...</span>
+    <span id="count"></span>
+  </div>
 </div>
 
 <div class="container">
 
 <div class="sidebar">
-<textarea id="input"></textarea>
-<textarea id="chat"></textarea>
+<textarea id="input" placeholder="word per line"></textarea>
+<textarea id="chat" placeholder="definition | example"></textarea>
 <button onclick="save()">Save</button>
+<button onclick="clearInputs()">Clear</button>
 </div>
 
-<div>
-<input id="search" oninput="render()">
-<div id="out"></div>
+<div class="main">
+<div class="toolbar">
+<input id="search" placeholder="Search..." oninput="render()">
+</div>
+<div id="out" class="content"></div>
 </div>
 
 </div>
 
 <script>
-const API="https://script.google.com/macros/s/AKfycbyOot_kvXfvlkXm2hrBheBiIwxBC9or72iw9nhzo-6T5So2vGObnqrcCdUDYBVoWFJY/exec"
+const API = "https://script.google.com/macros/s/AKfycbwFmaiofv_cQU70VSU3gUjU4LUDQn3R-vm9X6cxwPczJZt_h18eLkHzLgC2DV29N5rH/exec";
 
-let data={}
-let queue=JSON.parse(localStorage.getItem("queue")||"[]")
+/* STATE */
+let data = {};
+let queue = JSON.parse(localStorage.getItem("queue")||"[]");
 
-function setStatus(c,t){
-status.className="status "+c
-status.innerText=t
+/* STATUS */
+const statusMap = {
+  ONLINE:["s-online","Synced"],
+  OFFLINE:["s-offline","Offline"],
+  SYNCING:["s-syncing","Syncing..."],
+  PENDING:["s-pending","Pending"]
+};
+
+function setStatus(s){
+  let el=document.getElementById("status");
+  el.className="status "+statusMap[s][0];
+  el.innerText=statusMap[s][1];
 }
 
-/* US VOICE */
-let voices=[]
-speechSynthesis.onvoiceschanged=()=>voices=speechSynthesis.getVoices()
+/* VOICE */
+let voices=[];
+speechSynthesis.onvoiceschanged=()=>voices=speechSynthesis.getVoices();
 
 function speak(w){
-let u=new SpeechSynthesisUtterance(w)
-u.lang="en-US"
-let v=voices.find(v=>v.lang==="en-US")
-if(v)u.voice=v
-speechSynthesis.speak(u)
+  let u=new SpeechSynthesisUtterance(w);
+  u.lang="en-US";
+  let v=voices.find(v=>v.lang==="en-US");
+  if(v)u.voice=v;
+  speechSynthesis.speak(u);
+}
+
+/* HELPERS */
+function defKey(d,e){
+  return (d||"").toLowerCase().trim()+"|||"+(e||"").toLowerCase().trim();
+}
+
+function mergeEntry(w,d,e){
+  w=w.toLowerCase().trim();
+  if(!data[w])data[w]=[];
+  let k=defKey(d,e);
+  if(!data[w].some(x=>defKey(x.def,x.ex)===k)){
+    data[w].push({def:d||"",ex:e||""});
+  }
 }
 
 /* PARSE */
 function parse(t){
-if(!t)return{def:"",ex:""}
-let a=t.split("|")
-return{def:a[0].trim(),ex:(a[1]||"").trim()}
+  if(!t)return{def:"",ex:""};
+  let p=t.split("|");
+  return{def:p[0].trim(),ex:(p[1]||"").trim()};
 }
 
 /* SAVE */
 async function save(){
-setStatus("syncing","Syncing...")
-let words=input.value.split("\n")
-let lines=chat.value.split("\n")
-let items=[]
+  let words=input.value.split("\n");
+  let defs=chat.value.split("\n");
+  let items=[];
 
-words.forEach((w,i)=>{
-w=w.toLowerCase()
-let p=parse(lines[i]||"")
-if(!data[w])data[w]=[]
+  words.forEach((w,i)=>{
+    let p=parse(defs[i]||"");
+    let wl=w.toLowerCase();
+    if(!wl)return;
 
-if(!data[w].some(d=>d.def===p.def)){
-data[w].push(p)
-items.push({word:w,definition:p.def,example:p.ex})
-}
-})
+    let k=defKey(p.def,p.ex);
+    if(!data[wl] || !data[wl].some(d=>defKey(d.def,d.ex)===k)){
+      mergeEntry(wl,p.def,p.ex);
+      items.push({word:wl,definition:p.def,example:p.ex});
+    }
+  });
 
-try{
-await fetch(API,{method:"POST",body:JSON.stringify({action:"batch",items})})
-setStatus("online","Synced")
-}catch{
-queue.push(...items)
-localStorage.setItem("queue",JSON.stringify(queue))
-setStatus("local","Saved locally")
-}
+  localStorage.setItem("words",JSON.stringify(data));
+  render();
 
-localStorage.setItem("words",JSON.stringify(data))
-render()
+  try{
+    await fetch(API,{method:"POST",body:JSON.stringify({action:"batch",items})});
+    setStatus("ONLINE");
+  }catch{
+    items.forEach(i=>{
+      let exists=queue.some(q=>q.word===i.word && q.definition===i.definition);
+      if(!exists)queue.push(i);
+    });
+    localStorage.setItem("queue",JSON.stringify(queue));
+    setStatus("PENDING");
+  }
 }
 
 /* DELETE */
 async function del(w){
-for(let d of data[w]){
-await fetch(API,{
-method:"POST",
-body:JSON.stringify({action:"delete",word:w,definition:d.def,example:d.ex})
-})
-}
-delete data[w]
-localStorage.setItem("words",JSON.stringify(data))
-render()
+  let defs=data[w]||[];
+  delete data[w];
+  localStorage.setItem("words",JSON.stringify(data));
+  render();
+
+  for(let d of defs){
+    try{
+      await fetch(API,{method:"POST",body:JSON.stringify({action:"delete",word:w,definition:d.def,example:d.ex})});
+    }catch{
+      queue.push({action:"delete",word:w,definition:d.def,example:d.ex});
+    }
+  }
 }
 
-/* UPDATE */
+/* EDIT */
 async function editWord(w){
-let d=data[w][0]
-let n=prompt("Edit",d.def)
-if(n){
-await fetch(API,{
-method:"POST",
-body:JSON.stringify({action:"update",word:w,oldDef:d.def,oldEx:d.ex,newDef:n,newEx:d.ex})
-})
-d.def=n
-render()
-}
+  let d=data[w][0];
+  let n=prompt("Edit",d.def);
+  if(!n)return;
+
+  let oldDef=d.def;
+  d.def=n;
+
+  try{
+    await fetch(API,{method:"POST",body:JSON.stringify({
+      action:"update",
+      word:w,
+      oldDef:oldDef,
+      oldEx:d.ex,
+      newDef:n,
+      newEx:d.ex
+    })});
+  }catch{
+    queue.push({action:"update",word:w,oldDef:oldDef,newDef:n});
+  }
+
+  render();
 }
 
 /* SYNC */
 async function syncQueue(){
-if(!queue.length)return
-setStatus("syncing","Syncing...")
+  if(!queue.length)return;
 
-let newQ=[]
-for(let i of queue){
-try{
-await fetch(API,{method:"POST",body:JSON.stringify({action:"batch",items:[i]})})
-}catch{
-newQ.push(i)
-}
-}
-queue=newQ
-localStorage.setItem("queue",JSON.stringify(queue))
+  setStatus("SYNCING");
 
-setStatus(queue.length?"local":"online",queue.length?"Pending":"Synced")
+  let failed=[];
+
+  for(let q of queue){
+    try{
+      let body=q.action==="delete"||q.action==="update"?q:{action:"batch",items:[q]};
+      await fetch(API,{method:"POST",body:JSON.stringify(body)});
+    }catch{
+      failed.push(q);
+    }
+  }
+
+  queue=failed;
+  localStorage.setItem("queue",JSON.stringify(queue));
+  setStatus(queue.length?"PENDING":"ONLINE");
 }
 
 /* LOAD */
 async function load(){
-try{
-let r=await fetch(API+"?action=getAll")
-let j=await r.json()
+  try{
+    data=JSON.parse(localStorage.getItem("words")||"{}");
+  }catch{data={};}
 
-j.data.forEach(i=>{
-if(!data[i.word])data[i.word]=[]
-data[i.word].push({def:i.definition,ex:i.example})
-})
+  render();
+  setStatus("SYNCING");
 
-setStatus("online","Synced")
-}catch{
-setStatus("offline","Offline")
-}
+  try{
+    let r=await fetch(API+"?action=getAll");
+    let j=await r.json();
 
-render()
-syncQueue()
+    let seen=new Set();
+
+    j.data.forEach(i=>{
+      let key=i.word.toLowerCase()+"|||"+i.definition.toLowerCase()+"|||"+i.example.toLowerCase();
+      if(!seen.has(key)){
+        seen.add(key);
+        mergeEntry(i.word,i.definition,i.example);
+      }
+    });
+
+    localStorage.setItem("words",JSON.stringify(data));
+    setStatus(queue.length?"PENDING":"ONLINE");
+
+  }catch{
+    setStatus("OFFLINE");
+  }
+
+  render();
 }
 
 /* RENDER */
 function render(){
-let s=search.value.toLowerCase()
-let list=Object.keys(data).filter(w=>w.includes(s))
-count.innerText=list.length
+  let s=search.value.toLowerCase();
+  let list=Object.keys(data).filter(w=>w.includes(s));
+  count.innerText=list.length;
 
-out.innerHTML="<table>"+list.map(w=>`
-<tr>
-<td class="word">${w}</td>
-<td>${data[w].map(d=>d.def).join("<br>")}</td>
-<td>
-<div class="actions">
-<span onclick="speak('${w}')">🔊</span>
-<span onclick="editWord('${w}')">✏️</span>
-<span onclick="del('${w}')">❌</span>
-</div>
-</td>
-</tr>`).join("")+"</table>"
+  out.innerHTML="<table>"+list.map(w=>{
+    let defs=data[w].map(d=>`
+      <div class="def">${d.def}</div>
+      ${d.ex?`<div class="ex">${d.ex}</div>`:""}
+    `).join("");
+
+    return `
+    <tr>
+      <td class="word">${w}</td>
+      <td>${defs}</td>
+      <td>
+        <div class="actions">
+          <span onclick="speak('${w}')">🔊</span>
+          <span onclick="editWord('${w}')">✏️</span>
+          <span onclick="del('${w}')">❌</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join("")+"</table>";
 }
 
-setInterval(syncQueue,5000)
-window.addEventListener("online",syncQueue)
+/* INIT */
+setInterval(syncQueue,6000);
+window.addEventListener("online",syncQueue);
 
-load()
+function clearInputs(){
+  input.value="";
+  chat.value="";
+}
+
+load();
 </script>
 
 </body>
