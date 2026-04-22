@@ -6,7 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Words Tool</title>
 
-<!-- PWA -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0b1220">
 
@@ -25,6 +24,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui}
 .online{background:#064e3b;color:#34d399}
 .offline{background:#450a0a;color:#f87171}
 .syncing{background:#422006;color:#facc15}
+.local{background:#422006;color:#facc15}
 
 .container{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 50px)}
 .sidebar{padding:16px;background:#0a1324;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:10px}
@@ -103,6 +103,7 @@ overflow:hidden;
 const API="https://script.google.com/macros/s/AKfycbxn6Y2FceyY3tg2v4kOvzI0Ghu5Pi6ulqhXi3Rl7G3LVf50mSjtcIa5ZlUx45RzbfyP/exec"
 
 let data={}
+let queue=JSON.parse(localStorage.getItem("queue")||"[]")
 let view="table"
 
 /* PWA */
@@ -128,8 +129,6 @@ return{def:t.trim(),ex:""}
 
 /* SAVE */
 async function save(){
-setStatus("syncing","Saving...")
-
 let w=input.value.split("\n").filter(Boolean)
 let l=chat.value.split("\n")
 let items=[]
@@ -147,25 +146,52 @@ items.push({word,definition:p.def,example:p.ex})
 }
 
 if(items.length){
+if(navigator.onLine){
+try{
 await fetch(API,{
 method:"POST",
 body:JSON.stringify({action:"batch",items})
 })
+setStatus("online","Saved")
+}catch{
+queue.push(...items)
+setStatus("local","Saved offline")
+}
+}else{
+queue.push(...items)
+setStatus("local","Saved offline")
+}
+
+localStorage.setItem("queue",JSON.stringify(queue))
 }
 
 localStorage.setItem("words",JSON.stringify(data))
 render()
-setStatus("online","Online")
+}
+
+/* SYNC */
+async function syncQueue(){
+if(!queue.length) return
+
+try{
+await fetch(API,{
+method:"POST",
+body:JSON.stringify({action:"batch",items:queue})
+})
+queue=[]
+localStorage.setItem("queue",JSON.stringify(queue))
+}catch{}
 }
 
 /* LOAD */
 async function load(){
-let saved=localStorage.getItem("words")
-if(saved)data=JSON.parse(saved)
+setStatus("syncing","Loading...")
 
 try{
 let r=await fetch(API)
 let j=await r.json()
+
+data={} // 🔥 source of truth
 
 j.data.forEach(i=>{
 let w=i.word.toLowerCase()
@@ -178,13 +204,21 @@ data[w].push(obj)
 }
 })
 
+localStorage.setItem("words",JSON.stringify(data))
 setStatus("online","Online")
+
 }catch{
 setStatus("offline","Offline")
 }
 
 render()
 }
+
+/* EVENTS */
+window.addEventListener("online", async ()=>{
+await syncQueue()
+await load()
+})
 
 /* UI */
 function formatText(t,id){
