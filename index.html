@@ -52,7 +52,6 @@ th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
 </style>
 
 </head>
-
 <body>
 
 <div class="header">
@@ -64,6 +63,7 @@ th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
 </div>
 
 <div class="container">
+
 <div class="sidebar">
 <textarea id="input" placeholder="Words"></textarea>
 <textarea id="chat" placeholder="definition | example"></textarea>
@@ -80,38 +80,21 @@ th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
 </div>
 <div class="content" id="out"></div>
 </div>
+
 </div>
 
 <script>
-const API="https://script.google.com/macros/s/AKfycbyrFf5fgB7FuCZgQ92IY9qPZLeszi2s-6jeCq2YYk71-pV-uAYXrCZgLdWhUZe2SDQu/exec"
+const API="https://script.google.com/macros/s/AKfycbyWdSegGJbD4UWlbhMQnS_Uv8FU9bOK7phhEeEVrn5ZOUVh_H_SXtY0uGwnIgVx6R7f/exec"
 
 let data={}
 let queue=JSON.parse(localStorage.getItem("queue")||"[]")
 let view="table"
-let retryTimer=null
-let chatTab=null
 
+/* STATUS */
 function setStatus(t,x){
 let s=document.getElementById("status")
 s.className="status "+t
 s.innerText=x
-}
-
-/* PROMPT */
-function buildPrompt(){
-let words=input.value.trim()
-if(!words) return "Give definitions and examples"
-return `For each word return EXACTLY:
-definition | example
-
-${words}`
-}
-async function generate(){
-let p=buildPrompt()
-try{navigator.clipboard.writeText(p)}catch{}
-if(!chatTab||chatTab.closed){
-chatTab=window.open("https://chat.openai.com","_blank")
-}else chatTab.focus()
 }
 
 /* PARSE */
@@ -128,28 +111,28 @@ return{def:a[0].trim(),ex:a.slice(1).join("--").trim()}
 return{def:t.trim(),ex:""}
 }
 
-/* SAVE (BATCH FIX) */
+/* SAVE */
 async function save(){
 setStatus("syncing","Syncing...")
-let w=input.value.split("\n").map(x=>x.trim()).filter(Boolean)
+
+let w=input.value.split("\n").filter(Boolean)
 let l=chat.value.split("\n")
 let batch=[]
 
-for(let i=0;i<w.length;i++){
-let word=w[i].toLowerCase()
-if(!word) continue
+w.forEach((word,i)=>{
+word=word.toLowerCase()
 let p=parse(l[i]||"")
+
 if(!data[word])data[word]=[]
 
 if(!data[word].some(d=>d.def===p.def&&d.ex===p.ex)){
 data[word].push(p)
 batch.push({word,definition:p.def,example:p.ex})
 }
-}
+})
 
 localStorage.setItem("words",JSON.stringify(data))
 
-if(batch.length){
 try{
 await fetch(API,{
 method:"POST",
@@ -161,29 +144,75 @@ queue.push(...batch)
 localStorage.setItem("queue",JSON.stringify(queue))
 setStatus("local","Saved locally")
 }
+
+render()
 }
 
+/* DELETE */
+async function del(w){
+let defs=data[w]||[]
+
+delete data[w]
+localStorage.setItem("words",JSON.stringify(data))
+render()
+
+for(let d of defs){
+let item={action:"delete",word:w,definition:d.def,example:d.ex}
+try{
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
+}catch{
+queue.push(item)
+localStorage.setItem("queue",JSON.stringify(queue))
+}
+}
+}
+
+/* EDIT */
+async function editWord(w){
+let d=data[w][0]
+
+let newDef=prompt("Edit",d.def)
+if(newDef===null)return
+
+let newEx=prompt("Example",d.ex||"")
+
+let item={
+action:"update",
+word:w,
+oldDef:d.def,
+oldEx:d.ex||"",
+newDef:newDef,
+newEx:newEx||""
+}
+
+try{
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
+}catch{
+queue.push(item)
+localStorage.setItem("queue",JSON.stringify(queue))
+}
+
+d.def=newDef
+d.ex=newEx
+localStorage.setItem("words",JSON.stringify(data))
 render()
 }
 
 /* QUEUE */
 async function syncQueue(){
 if(!queue.length)return
-setStatus("syncing","Syncing...")
+
 let newQ=[]
 for(let item of queue){
 try{
-await fetch(API,{
-method:"POST",
-body:JSON.stringify({action:"batch",items:[item]})
-})
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
 }catch{
 newQ.push(item)
 }
 }
+
 queue=newQ
 localStorage.setItem("queue",JSON.stringify(queue))
-setStatus("online","Online")
 }
 
 /* LOAD */
@@ -191,11 +220,11 @@ async function load(){
 let saved=localStorage.getItem("words")
 if(saved)data=JSON.parse(saved)
 
-setStatus("syncing","Loading...")
 try{
-let r=await fetch(API+"?action=getAll",{cache:"no-store"})
+let r=await fetch(API+"?action=getAll")
 let j=await r.json()
-j.data?.forEach(i=>{
+
+j.data.forEach(i=>{
 let w=i.word.toLowerCase()
 if(!data[w])data[w]=[]
 let obj={def:i.definition||"",ex:i.example||""}
@@ -203,114 +232,38 @@ if(!data[w].some(d=>d.def===obj.def&&d.ex===obj.ex)){
 data[w].push(obj)
 }
 })
+
 setStatus("online","Online")
 }catch{
-setStatus("local","API Error")
-startRetry()
+setStatus("offline","Offline")
 }
+
 syncQueue()
 render()
-}
-
-function startRetry(){
-if(retryTimer)return
-retryTimer=setInterval(load,5000)
-}
-
-/* TEXT */
-function formatText(t,id){
-if(!t)return""
-let short=t.length>120
-return `<div><div class="def ${short?'clamp':''}" id="${id}">${t}</div>
-${short?`<span class="link" onclick="toggleText('${id}',this)">Read more</span>`:""}</div>`
-}
-function toggleText(id,b){
-let el=document.getElementById(id)
-el.classList.toggle("clamp")
-b.innerText=el.classList.contains("clamp")?"Read more":"Show less"
-}
-
-/* MULTI DEFS */
-function renderDefs(arr,w){
-function block(d,i){
-return `<div>${formatText(d.def,w+i)}${d.ex?`<div class="example">${d.ex}</div>`:""}</div>`
-}
-let first=block(arr[0],0)
-if(arr.length===1)return first
-let rest=arr.slice(1).map((d,i)=>block(d,i+1)).join("")
-return `${first}<div class="more" id="g${w}">${rest}</div>
-<span class="link" onclick="toggle('g${w}',this)">Show all +${arr.length-1}</span>`
-}
-function toggle(id,b){
-let el=document.getElementById(id)
-el.classList.toggle("open")
-b.innerText=el.classList.contains("open")?"Hide":"Show all"
 }
 
 /* RENDER */
 function render(){
 let s=search.value.toLowerCase()
-let list=Object.keys(data).filter(w=>{
-return w.includes(s)||data[w].some(d=>d.def.toLowerCase().includes(s)||d.ex.toLowerCase().includes(s))
-}).reverse()
-
+let list=Object.keys(data).filter(w=>w.includes(s)).reverse()
 count.innerText=list.length
 
-if(view==="table"){
-let h="<table><tr><th>Word</th><th>Details</th><th>Actions</th></tr>"
-list.forEach(w=>{
-h+=`<tr><td>${w}</td><td>${renderDefs(data[w],w)}</td>
-<td><div class="actions">
-<span onclick="speak('${w}')">🔊</span>
+out.innerHTML="<table><tr><th>Word</th><th>Details</th><th></th></tr>"+
+list.map(w=>{
+let d=data[w].map(x=>x.def).join("<br>")
+return `<tr><td>${w}</td><td>${d}</td>
+<td>
 <span onclick="editWord('${w}')">✏️</span>
 <span onclick="del('${w}')">❌</span>
-</div></td></tr>`
-})
-out.innerHTML=h+"</table>"
-}else{
-let h="<div class='cards'>"
-list.forEach(w=>{
-h+=`<div class="card"><div class="word">${w}</div>
-${renderDefs(data[w],w)}
-<div class="actions">
-<span onclick="speak('${w}')">🔊</span>
-<span onclick="editWord('${w}')">✏️</span>
-<span onclick="del('${w}')">❌</span>
-</div></div>`
-})
-out.innerHTML=h+"</div>"
-}
+</td></tr>`
+}).join("")+"</table>"
 }
 
-/* ACTIONS */
-function speak(w){speechSynthesis.speak(new SpeechSynthesisUtterance(w))}
-function editWord(w){
-let n=prompt("Edit",data[w][0].def)
-if(n!==null){data[w][0].def=n;localStorage.setItem("words",JSON.stringify(data));render()}
-}
-function del(w){
-delete data[w]
-localStorage.setItem("words",JSON.stringify(data))
-render()
-}
-
-/* VIEW + SEARCH */
-function setView(v){view=v;bt.classList.toggle("active",v==="table");bc.classList.toggle("active",v==="cards");render()}
+function setView(v){view=v;render()}
 function clearAll(){input.value="";chat.value=""}
-
-/* EVENTS */
-window.addEventListener("online",load)
-window.addEventListener("offline",()=>setStatus("offline","Offline"))
 
 load()
 setInterval(syncQueue,5000)
-
-/* FIX START */
-window.addEventListener("load",()=>{
-setTimeout(()=>{
-if(status.innerText==="Starting...") setStatus("online","Online")
-},1500)
-})
 </script>
 
 </body>
