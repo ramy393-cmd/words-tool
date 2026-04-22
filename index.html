@@ -49,7 +49,6 @@ th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
 .more{display:none}
 .more.open{display:block}
 .actions{display:flex;gap:10px}
-.action{cursor:pointer}
 </style>
 
 </head>
@@ -132,7 +131,7 @@ return{def:a[0].trim(),ex:a.slice(1).join("--").trim()}
 return{def:t.trim(),ex:""}
 }
 
-/* SAVE (BATCH) */
+/* SAVE (FIXED) */
 async function save(){
 setStatus("syncing","Syncing...")
 
@@ -159,8 +158,8 @@ if(batch.length){
 try{
 await fetch(API,{
 method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({action:"batch",items:batch})
+body:JSON.stringify({action:"batch",items:batch}),
+mode:"no-cors"
 })
 setStatus("online","Online")
 }catch{
@@ -174,77 +173,7 @@ localStorage.setItem("words",JSON.stringify(data))
 render()
 }
 
-/* TEXT */
-function formatText(t,id){
-if(!t)return""
-let short=t.length>120
-return `<div><div class="def ${short?'clamp':''}" id="${id}">${t}</div>
-${short?`<span class="link" onclick="toggleText('${id}',this)">Read more</span>`:""}</div>`
-}
-
-function toggleText(id,b){
-let el=document.getElementById(id)
-el.classList.toggle("clamp")
-b.innerText=el.classList.contains("clamp")?"Read more":"Show less"
-}
-
-/* DEFS */
-function renderDefs(arr,w){
-function block(d,i){
-return `<div>${formatText(d.def,w+i)}${d.ex?`<div class="example">${d.ex}</div>`:""}</div>`
-}
-let first=block(arr[0],0)
-if(arr.length===1)return first
-let rest=arr.slice(1).map((d,i)=>block(d,i+1)).join("")
-return `${first}<div class="more" id="g${w}">${rest}</div>
-<span class="link" onclick="toggle('g${w}',this)">Show all +${arr.length-1}</span>`
-}
-
-function toggle(id,b){
-let el=document.getElementById(id)
-el.classList.toggle("open")
-b.innerText=el.classList.contains("open")?"Hide":"Show all"
-}
-
-/* LOAD */
-async function load(){
-let saved=localStorage.getItem("words")
-if(saved)data=JSON.parse(saved)
-
-setStatus("syncing","Syncing...")
-
-try{
-let r=await fetch(API+"?action=getAll",{cache:"no-store"})
-let j=await r.json()
-
-let arr=Array.isArray(j)?j:(j.data||[])
-
-arr.forEach(i=>{
-let w=i.word.toLowerCase().trim()
-if(!data[w])data[w]=[]
-let obj={def:i.definition||"",ex:i.example||""}
-if(!data[w].some(d=>d.def===obj.def&&d.ex===obj.ex)){
-data[w].push(obj)
-}
-})
-
-setStatus("online","Online")
-
-}catch{
-setStatus("local","API Error")
-startRetry()
-}
-
-syncQueue()
-render()
-}
-
-function startRetry(){
-if(retryTimer)return
-retryTimer=setInterval(load,7000)
-}
-
-/* QUEUE */
+/* QUEUE FIX */
 async function syncQueue(){
 if(!queue.length)return
 setStatus("syncing","Syncing...")
@@ -252,7 +181,11 @@ setStatus("syncing","Syncing...")
 let newQ=[]
 for(let item of queue){
 try{
-await fetch(API,{method:"POST",body:JSON.stringify(item)})
+await fetch(API,{
+method:"POST",
+body:JSON.stringify(item),
+mode:"no-cors"
+})
 }catch{
 newQ.push(item)
 }
@@ -261,69 +194,6 @@ queue=newQ
 localStorage.setItem("queue",JSON.stringify(queue))
 setStatus("online","Online")
 }
-
-/* RENDER */
-function render(){
-let s=search.value.toLowerCase()
-let list=Object.keys(data).filter(w=>{
-return w.includes(s)||data[w].some(d=>d.def.toLowerCase().includes(s)||d.ex.toLowerCase().includes(s))
-}).reverse()
-
-count.innerText=list.length
-
-if(view==="table"){
-let h="<table><tr><th>Word</th><th>Details</th><th>Actions</th></tr>"
-list.forEach(w=>{
-h+=`<tr><td>${w}</td><td>${renderDefs(data[w],w)}</td>
-<td><div class="actions">
-<span onclick="speak('${w}')">🔊</span>
-<span onclick="editWord('${w}')">✏️</span>
-<span onclick="del('${w}')">❌</span>
-</div></td></tr>`
-})
-out.innerHTML=h+"</table>"
-}else{
-let h="<div class='cards'>"
-list.forEach(w=>{
-h+=`<div class="card"><div class="word">${w}</div>
-${renderDefs(data[w],w)}
-<div class="actions">
-<span onclick="speak('${w}')">🔊</span>
-<span onclick="editWord('${w}')">✏️</span>
-<span onclick="del('${w}')">❌</span>
-</div></div>`
-})
-out.innerHTML=h+"</div>"
-}
-}
-
-/* ACTIONS */
-function speak(w){speechSynthesis.speak(new SpeechSynthesisUtterance(w))}
-function editWord(w){
-let n=prompt("Edit",data[w][0].def)
-if(n!==null){data[w][0].def=n;localStorage.setItem("words",JSON.stringify(data));render()}
-}
-function del(w){
-delete data[w]
-localStorage.setItem("words",JSON.stringify(data))
-render()
-}
-
-search.oninput=()=>render()
-function setView(v){view=v;bt.classList.toggle("active",v==="table");bc.classList.toggle("active",v==="cards");render()}
-function clearAll(){input.value="";chat.value=""}
-
-window.addEventListener("online",load)
-window.addEventListener("offline",()=>setStatus("offline","Offline"))
-
-load()
-
-/* FIX Starting */
-window.addEventListener("load",()=>{
-setTimeout(()=>{
-if(status.innerText==="Starting...") setStatus("online","Online")
-},1500)
-})
 </script>
 
 </body>
