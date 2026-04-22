@@ -60,6 +60,8 @@ text-overflow:ellipsis;
 
 .actions{display:flex;gap:10px}
 .action{cursor:pointer;flex-shrink:0}
+
+.more{color:#38bdf8;cursor:pointer;font-size:12px}
 </style>
 
 </head>
@@ -104,23 +106,58 @@ let data=JSON.parse(localStorage.getItem("words")||"{}");
 let queue=JSON.parse(localStorage.getItem("queue")||"[]");
 let view="table";
 
+/* STATUS */
 function setStatus(t,x){
 status.className="status "+t;
 status.innerText=x;
 }
 
+/* RETRY QUEUE */
+setInterval(syncQueue,5000);
+
+async function syncQueue(){
+if(!queue.length)return;
+
+setStatus("syncing","Syncing...")
+
+let newQueue=[];
+
+for(let item of queue){
+try{
+await fetch(API,{
+method:"POST",
+body:JSON.stringify(item)
+})
+}catch{
+newQueue.push(item)
+}
+}
+
+queue=newQueue;
+localStorage.setItem("queue",JSON.stringify(queue));
+
+if(queue.length===0){
+setStatus("online","Online")
+}else{
+setStatus("local","Pending")
+}
+}
+
+/* SPEAK */
 function speak(w){
 let u=new SpeechSynthesisUtterance(w);
 u.lang="en-US";
 speechSynthesis.speak(u);
 }
 
+/* PARSE */
 function parse(t){
 if(!t)return{def:"",ex:""}
 let p=t.split("|");
 return{def:p[0]?.trim()||"",ex:p[1]?.trim()||""}
 }
 
+/* SAVE */
 async function save(){
 setStatus("syncing","Saving...")
 
@@ -136,8 +173,8 @@ let p=parse(defs[i]||"")
 if(!data[word])data[word]=[]
 
 if(!data[word].some(d=>d.def===p.def&&d.ex===p.ex)){
-data[word].push(p)
-items.push({word,definition:p.def,example:p.ex})
+data[word].push({...p,open:false})
+items.push({action:"batch",items:[{word,definition:p.def,example:p.ex}]})
 }
 })
 
@@ -147,7 +184,7 @@ render()
 try{
 await fetch(API,{
 method:"POST",
-body:JSON.stringify({action:"batch",items})
+body:JSON.stringify({action:"batch",items:items.map(i=>i.items[0])})
 })
 setStatus("online","Online")
 }catch{
@@ -157,6 +194,7 @@ setStatus("local","Saved locally")
 }
 }
 
+/* DELETE */
 async function del(w){
 let defs=data[w]||[]
 
@@ -164,29 +202,19 @@ delete data[w]
 localStorage.setItem("words",JSON.stringify(data))
 render()
 
-try{
 for(let d of defs){
-await fetch(API,{
-method:"POST",
-body:JSON.stringify({
-action:"delete",
-word:w,
-definition:d.def
-})
-})
-}
-setStatus("online","Online")
+let item={action:"delete",word:w,definition:d.def}
+try{
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
 }catch{
-queue.push(...defs.map(d=>({
-action:"delete",
-word:w,
-definition:d.def
-})))
-localStorage.setItem("queue",JSON.stringify(queue))
-setStatus("local","Saved locally")
+queue.push(item)
 }
 }
 
+localStorage.setItem("queue",JSON.stringify(queue))
+}
+
+/* EDIT */
 async function edit(w){
 let oldDef=data[w][0].def
 let newDef=prompt("Edit",oldDef)
@@ -196,29 +224,16 @@ data[w][0].def=newDef
 localStorage.setItem("words",JSON.stringify(data))
 render()
 
+let item={action:"update",word:w,oldDefinition:oldDef,newDefinition:newDef}
+
 try{
-await fetch(API,{
-method:"POST",
-body:JSON.stringify({
-action:"update",
-word:w,
-oldDefinition:oldDef,
-newDefinition:newDef
-})
-})
-setStatus("online","Online")
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
 }catch{
-queue.push({
-action:"update",
-word:w,
-oldDefinition:oldDef,
-newDefinition:newDef
-})
-localStorage.setItem("queue",JSON.stringify(queue))
-setStatus("local","Saved locally")
+queue.push(item)
 }
 }
 
+/* LOAD */
 async function load(){
 setStatus("syncing","Syncing...")
 
@@ -230,7 +245,7 @@ j.data?.forEach(i=>{
 let w=i.word.toLowerCase()
 if(!data[w])data[w]=[]
 
-let obj={def:i.definition||"",ex:i.example||""}
+let obj={def:i.definition||"",ex:i.example||"",open:false}
 
 if(!data[w].some(d=>d.def===obj.def&&d.ex===obj.ex)){
 data[w].push(obj)
@@ -246,6 +261,13 @@ setStatus("offline","Offline")
 render()
 }
 
+/* TOGGLE READ MORE */
+function toggle(w,i){
+data[w][i].open=!data[w][i].open
+render()
+}
+
+/* RENDER */
 function render(){
 let s=search.value.toLowerCase()
 
@@ -255,22 +277,28 @@ return w.includes(s)||data[w].some(d=>d.def.toLowerCase().includes(s)||d.ex.toLo
 
 count.innerText=list.length
 
+function format(d,w,i){
+let short=d.def.length>80 && !d.open
+return `
+<div>
+${short ? d.def.slice(0,80)+"..." : d.def}
+${d.def.length>80 ? `<div class="more" onclick="toggle('${w}',${i})">${d.open?"Collapse":"Read more"}</div>`:""}
+${d.ex?`<div class="example">${d.ex}</div>`:""}
+</div>`
+}
+
 if(view==="table"){
 out.innerHTML=`<table>
 <tr><th>Word</th><th>Details</th><th>Actions</th></tr>
 ${list.map(w=>`
 <tr>
 <td class="word">${w}</td>
-<td>${data[w].map(d=>`
-<div>
-${d.def}
-${d.ex?`<div class="example">${d.ex}</div>`:""}
-</div>`).join("")}</td>
+<td>${data[w].map((d,i)=>format(d,w,i)).join("")}</td>
 <td>
 <div class="actions">
-<span class="action" onclick="speak('${w}')">🔊</span>
-<span class="action" onclick="edit('${w}')">✏️</span>
-<span class="action" onclick="del('${w}')">❌</span>
+<span onclick="speak('${w}')">🔊</span>
+<span onclick="edit('${w}')">✏️</span>
+<span onclick="del('${w}')">❌</span>
 </div>
 </td>
 </tr>`).join("")}
@@ -280,10 +308,7 @@ out.innerHTML=`<div class="cards">
 ${list.map(w=>`
 <div class="card">
 <div class="word">${w}</div>
-${data[w].map(d=>`
-<div>${d.def}
-${d.ex?`<div class="example">${d.ex}</div>`:""}
-</div>`).join("")}
+${data[w].map((d,i)=>format(d,w,i)).join("")}
 <div class="actions">
 <span onclick="speak('${w}')">🔊</span>
 <span onclick="edit('${w}')">✏️</span>
