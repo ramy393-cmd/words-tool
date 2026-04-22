@@ -7,7 +7,6 @@
 <title>Words Tool</title>
 
 <style>
-/* === SAME UI (NO CHANGE) === */
 :root{
 --bg:#060c18;--card:#0f1a2e;--border:#1e2d45;
 --accent:#38bdf8;--text:#e2e8f0;--muted:#64748b;--gold:#facc15;
@@ -133,12 +132,14 @@ return{def:a[0].trim(),ex:a.slice(1).join("--").trim()}
 return{def:t.trim(),ex:""}
 }
 
-/* SAVE */
+/* SAVE (BATCH) */
 async function save(){
 setStatus("syncing","Syncing...")
 
 let w=input.value.split("\n").map(x=>x.trim()).filter(Boolean)
 let l=chat.value.split("\n")
+
+let batch=[]
 
 for(let i=0;i<w.length;i++){
 let word=w[i].toLowerCase()
@@ -150,19 +151,22 @@ if(!data[word])data[word]=[]
 
 if(!data[word].some(d=>d.def===p.def&&d.ex===p.ex)){
 data[word].push(p)
+batch.push({word,definition:p.def,example:p.ex})
+}
+}
 
-let item={action:"save",word,definition:p.def,example:p.ex}
-
+if(batch.length){
 try{
-await fetch(API,{method:"POST",body:JSON.stringify(item)})
+await fetch(API,{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({action:"batch",items:batch})
+})
 setStatus("online","Online")
 }catch{
-if(!queue.some(q=>q.word===item.word&&q.definition===item.definition)){
-queue.push(item)
+queue.push(...batch)
 localStorage.setItem("queue",JSON.stringify(queue))
-}
 setStatus("local","Saved locally")
-}
 }
 }
 
@@ -191,7 +195,6 @@ return `<div>${formatText(d.def,w+i)}${d.ex?`<div class="example">${d.ex}</div>`
 }
 let first=block(arr[0],0)
 if(arr.length===1)return first
-
 let rest=arr.slice(1).map((d,i)=>block(d,i+1)).join("")
 return `${first}<div class="more" id="g${w}">${rest}</div>
 <span class="link" onclick="toggle('g${w}',this)">Show all +${arr.length-1}</span>`
@@ -214,8 +217,10 @@ try{
 let r=await fetch(API+"?action=getAll",{cache:"no-store"})
 let j=await r.json()
 
-j.data?.forEach(i=>{
-let w=i.word.toLowerCase()
+let arr=Array.isArray(j)?j:(j.data||[])
+
+arr.forEach(i=>{
+let w=i.word.toLowerCase().trim()
 if(!data[w])data[w]=[]
 let obj={def:i.definition||"",ex:i.example||""}
 if(!data[w].some(d=>d.def===obj.def&&d.ex===obj.ex)){
@@ -236,7 +241,7 @@ render()
 
 function startRetry(){
 if(retryTimer)return
-retryTimer=setInterval(load,5000)
+retryTimer=setInterval(load,7000)
 }
 
 /* QUEUE */
