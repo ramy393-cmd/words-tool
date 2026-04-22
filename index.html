@@ -48,7 +48,14 @@ th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
 .card{background:var(--card);padding:12px;border-radius:10px;border:1px solid var(--border)}
 
-.word{color:var(--accent);font-weight:700;word-break:break-word}
+.word{
+color:var(--accent);
+font-weight:700;
+white-space:nowrap;
+overflow:hidden;
+text-overflow:ellipsis;
+}
+
 .example{color:var(--gold);margin-top:4px}
 
 .actions{display:flex;gap:10px}
@@ -91,7 +98,7 @@ th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
 
 <script>
 
-const API="https://script.google.com/macros/s/AKfycbxn6Y2FceyY3tg2v4kOvzI0Ghu5Pi6ulqhXi3Rl7G3LVf50mSjtcIa5ZlUx45RzbfyP/exec";
+const API="const API="https://script.google.com/macros/s/AKfycbxn6Y2FceyY3tg2v4kOvzI0Ghu5Pi6ulqhXi3Rl7G3LVf50mSjtcIa5ZlUx45RzbfyP/exec";
 
 let data=JSON.parse(localStorage.getItem("words")||"{}");
 let queue=JSON.parse(localStorage.getItem("queue")||"[]");
@@ -145,6 +152,68 @@ body:JSON.stringify({action:"batch",items})
 setStatus("online","Online")
 }catch{
 queue.push(...items)
+localStorage.setItem("queue",JSON.stringify(queue))
+setStatus("local","Saved locally")
+}
+}
+
+async function del(w){
+let defs=data[w]||[]
+
+delete data[w]
+localStorage.setItem("words",JSON.stringify(data))
+render()
+
+try{
+for(let d of defs){
+await fetch(API,{
+method:"POST",
+body:JSON.stringify({
+action:"delete",
+word:w,
+definition:d.def
+})
+})
+}
+setStatus("online","Online")
+}catch{
+queue.push(...defs.map(d=>({
+action:"delete",
+word:w,
+definition:d.def
+})))
+localStorage.setItem("queue",JSON.stringify(queue))
+setStatus("local","Saved locally")
+}
+}
+
+async function edit(w){
+let oldDef=data[w][0].def
+let newDef=prompt("Edit",oldDef)
+if(!newDef)return
+
+data[w][0].def=newDef
+localStorage.setItem("words",JSON.stringify(data))
+render()
+
+try{
+await fetch(API,{
+method:"POST",
+body:JSON.stringify({
+action:"update",
+word:w,
+oldDefinition:oldDef,
+newDefinition:newDef
+})
+})
+setStatus("online","Online")
+}catch{
+queue.push({
+action:"update",
+word:w,
+oldDefinition:oldDef,
+newDefinition:newDef
+})
 localStorage.setItem("queue",JSON.stringify(queue))
 setStatus("local","Saved locally")
 }
@@ -223,21 +292,6 @@ ${d.ex?`<div class="example">${d.ex}</div>`:""}
 </div>`).join("")}
 </div>`
 }
-}
-
-function edit(w){
-let n=prompt("Edit",data[w][0].def)
-if(n){
-data[w][0].def=n
-localStorage.setItem("words",JSON.stringify(data))
-render()
-}
-}
-
-function del(w){
-delete data[w]
-localStorage.setItem("words",JSON.stringify(data))
-render()
 }
 
 function generate(){
