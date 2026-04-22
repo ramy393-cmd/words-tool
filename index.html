@@ -158,7 +158,10 @@ if(batch.length){
 try{
 await fetch(API,{
 method:"POST",
-body:JSON.stringify({action:"batch",items:batch}),
+body:JSON.stringify({
+  action:"batch",
+  items:[item]
+}),
 mode:"no-cors"
 })
 setStatus("online","Online")
