@@ -101,7 +101,6 @@ align-items:center;
 white-space:nowrap;
 }
 
-/* FIX التكسير */
 td{
 word-break:normal;
 overflow-wrap:break-word;
@@ -167,18 +166,28 @@ status.className="status "+c
 status.innerText=t
 }
 
-/* SAFE TEXT */
+function updateStatus(){
+if(!navigator.onLine){
+setStatus("offline","Offline")
+return
+}
+if(queue.length>0){
+setStatus("local","Pending sync")
+return
+}
+setStatus("online","Synced")
+}
+
+/* SAFE */
 function safeText(t){
 return String(t||"")
 .replace(/</g,"&lt;")
 .replace(/>/g,"&gt;")
-.replace(/"/g,"&quot;")
-.replace(/'/g,"&#39;")
 }
 
 /* SPEAK */
-function speak(word){
-let u=new SpeechSynthesisUtterance(word)
+function speak(w){
+let u=new SpeechSynthesisUtterance(w)
 u.lang="en-US"
 speechSynthesis.speak(u)
 }
@@ -223,9 +232,7 @@ let j=await res.json()
 
 if(j && j.ok){
 setStatus("online","Synced")
-}else{
-throw "error"
-}
+}else throw "err"
 
 }catch{
 queue.push(...batch)
@@ -272,8 +279,6 @@ if(saved)data=JSON.parse(saved)
 
 try{
 let r=await fetch(API+"?action=getAll")
-if(!r.ok)throw "net"
-
 let j=await r.json()
 
 j.data.forEach(i=>{
@@ -286,49 +291,15 @@ data[w].push(obj)
 }
 })
 
-setStatus("online","Synced")
-
-}catch{
-setStatus(queue.length?"local":"offline",
-queue.length?"Pending sync":"Offline")
-}
+}catch{}
 
 render()
+updateStatus()
 }
 
-function formatText(t,id){
-if(t.length<120)return safeText(t)
-return `<div id="${id}" class="clamp">${safeText(t)}</div>
-<span class="link" onclick="toggleText('${id}',this)">Read more</span>`
-}
-
-function toggleText(id,b){
-let el=document.getElementById(id)
-el.classList.toggle("clamp")
-b.innerText=el.classList.contains("clamp")?"Read more":"Show less"
-}
-
-function renderDefs(arr,w){
-let first=formatText(arr[0].def,w)
-
-let rest=arr.slice(1).map(d=>`
-<div>${safeText(d.def)}
-${d.ex?`<div class="example">${safeText(d.ex)}</div>`:""}
-</div>`).join("")
-
-if(arr.length===1){
-return first+(arr[0].ex?`<div class="example">${safeText(arr[0].ex)}</div>`:"")
-}
-
-return `${first}
-${arr[0].ex?`<div class="example">${safeText(arr[0].ex)}</div>`:""}
-<div class="more" id="g${w}">${rest}</div>
-<span class="link" onclick="toggle('${w}')">Show all</span>`
-}
-
-function toggle(w){
-document.getElementById("g"+w).classList.toggle("open")
-}
+setInterval(updateStatus,3000)
+window.addEventListener("online",updateStatus)
+window.addEventListener("offline",updateStatus)
 
 function render(){
 let s=search.value.toLowerCase()
@@ -340,12 +311,11 @@ data[w].some(d=>d.def.toLowerCase().includes(s))
 
 count.innerText=list.length
 
-if(view==="table"){
 out.innerHTML="<table><tr><th>Word</th><th>Details</th><th></th></tr>"+
 list.map(w=>`
 <tr>
 <td class="word">${safeText(w)}</td>
-<td>${renderDefs(data[w],w)}</td>
+<td>${data[w].map(d=>d.def).join("<br>")}</td>
 <td>
 <div class="actions">
 <span onclick="speak('${safeText(w)}')">🔊</span>
@@ -354,26 +324,6 @@ list.map(w=>`
 </div>
 </td>
 </tr>`).join("")+"</table>"
-}else{
-out.innerHTML="<div class='cards'>"+
-list.map(w=>`
-<div class="card">
-<div class="word">${safeText(w)}</div>
-${renderDefs(data[w],w)}
-<div class="actions">
-<span onclick="speak('${safeText(w)}')">🔊</span>
-<span onclick="editWord('${safeText(w)}')">✏️</span>
-<span onclick="del('${safeText(w)}')">❌</span>
-</div>
-</div>`).join("")+"</div>"
-}
-}
-
-function setView(v){
-view=v
-bt.classList.toggle("active",v==="table")
-bc.classList.toggle("active",v==="cards")
-render()
 }
 
 function clearAll(){
