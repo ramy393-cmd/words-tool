@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,64 +5,105 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Words Tool</title>
 
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0b1220">
-
 <style>
 :root{
---bg:#060c18;--card:#0f1a2e;--border:#1e2d45;
---accent:#38bdf8;--text:#e2e8f0;--muted:#64748b;--gold:#facc15;
+--bg:#060c18;
+--card:#0f1a2e;
+--border:#1e2d45;
+--accent:#38bdf8;
+--text:#e2e8f0;
+--muted:#64748b;
+--gold:#facc15;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:system-ui}
 
-.header{display:flex;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:#0a1324}
+/* HEADER */
+.header{
+display:flex;justify-content:space-between;align-items:center;
+padding:14px 20px;border-bottom:1px solid var(--border);background:#0a1324
+}
 .logo{color:var(--accent);font-weight:700}
-.header-right{display:flex;gap:10px}
-.status{padding:4px 10px;border-radius:999px;font-size:12px}
+.header-right{display:flex;align-items:center;gap:10px}
+
+/* STATUS */
+.status{padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600}
 .online{background:#064e3b;color:#34d399}
 .offline{background:#450a0a;color:#f87171}
-.local{background:#422006;color:#facc15}
 .syncing{background:#422006;color:#facc15}
+.local{background:#422006;color:#facc15}
 
+/* LAYOUT */
 .container{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 50px)}
-@media(max-width:900px){
-.container{grid-template-columns:1fr}
-.sidebar{border-right:none;border-bottom:1px solid var(--border)}
+@media(max-width:900px){.container{grid-template-columns:1fr}}
+
+/* SIDEBAR */
+.sidebar{
+padding:16px;background:#0a1324;border-right:1px solid var(--border);
+display:flex;flex-direction:column;gap:10px
 }
-
-.sidebar{padding:16px;background:#0a1324;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:10px}
-
 textarea,input{
 width:100%;padding:10px;border-radius:8px;
 border:1px solid var(--border);background:var(--card);color:white
 }
-
-button{padding:10px;border:none;border-radius:8px;cursor:pointer}
+button{
+padding:10px;border:none;border-radius:8px;
+cursor:pointer;font-weight:600
+}
 .btn-primary{background:var(--accent);color:black}
-.btn-secondary{background:#38bdf8;color:black}
+.btn-secondary{
+background:linear-gradient(135deg,#0ea5e9,#38bdf8);
+color:#000
+}
 .btn-danger{border:1px solid var(--border);color:var(--muted)}
 
+/* MAIN */
 .main{display:flex;flex-direction:column}
-.toolbar{display:flex;gap:10px;padding:12px;border-bottom:1px solid var(--border)}
+.toolbar{
+display:flex;gap:10px;padding:12px;
+border-bottom:1px solid var(--border);
+background:#0a1324;flex-wrap:wrap
+}
 .toolbar input{flex:1}
-
-.view-btn{padding:8px;border:1px solid var(--border);background:var(--card);color:var(--muted)}
+.view-btn{
+padding:8px 12px;background:var(--card);
+border:1px solid var(--border);color:var(--muted);
+border-radius:6px;cursor:pointer
+}
 .view-btn.active{background:var(--accent);color:black}
 
+/* CONTENT */
 .content{overflow:auto;padding:14px}
 
+/* TABLE */
 table{width:100%;border-collapse:collapse}
-td,th{padding:10px;border-bottom:1px solid var(--border)}
+th,td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--muted);font-size:12px}
 
+/* CARDS */
 .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 @media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.cards{grid-template-columns:1fr}}
 
-.card{background:var(--card);padding:12px;border-radius:10px;border:1px solid var(--border)}
+.card{
+background:var(--card);padding:12px;border-radius:10px;
+border:1px solid var(--border);display:flex;flex-direction:column;gap:8px
+}
 
-.word{color:var(--accent);font-weight:700}
-.example{color:var(--gold);font-style:italic}
+/* TEXT */
+.word{color:var(--accent);font-weight:700;font-size:15px}
+.def{font-size:14px;line-height:1.6}
+.clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.link{color:var(--accent);font-size:12px;cursor:pointer;margin-top:3px}
+.example{color:var(--gold);font-size:13px;font-style:italic;margin-top:4px}
+
+/* COLLAPSE */
+.more{display:none}
+.more.open{display:block}
+
+/* ACTIONS */
+.actions{display:flex;gap:10px;margin-top:6px}
+.action{cursor:pointer;font-size:15px}
 </style>
 </head>
 
@@ -82,8 +122,9 @@ td,th{padding:10px;border-bottom:1px solid var(--border)}
 <div class="sidebar">
 <textarea id="input" placeholder="Words"></textarea>
 <textarea id="chat" placeholder="definition | example"></textarea>
+
 <button class="btn-primary" onclick="save()">Save</button>
-<button class="btn-secondary">AI Prompt</button>
+<button class="btn-secondary" onclick="generate()">AI Prompt</button>
 <button class="btn-danger" onclick="clearAll()">Clear</button>
 </div>
 
@@ -93,143 +134,305 @@ td,th{padding:10px;border-bottom:1px solid var(--border)}
 <button class="view-btn active" id="bt" onclick="setView('table')">Table</button>
 <button class="view-btn" id="bc" onclick="setView('cards')">Cards</button>
 </div>
+
 <div class="content" id="out"></div>
 </div>
 
 </div>
 
 <script>
-const API="https://script.google.com/macros/s/AKfycbxn6Y2FceyY3tg2v4kOvzI0Ghu5Pi6ulqhXi3Rl7G3LVf50mSjtcIa5ZlUx45RzbfyP/exec"
+const API="https://script.google.com/macros/s/AKfycbzTvtv62SM-CMe1g9nrIYFbX9Yq_bOFHbW7OzAQSsTYgk8SBCU2srb66Ao-LNbBQvwL/exec"
 
 let data={}
 let queue=JSON.parse(localStorage.getItem("queue")||"[]")
-let view=window.innerWidth<768?"cards":"table"
+let view="table"
+let chatTab=null
+let retryTimer=null
 
-/* SERVICE WORKER */
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js")
-  })
+function setStatus(type,text){
+let s=document.getElementById("status")
+s.className="status "+type
+s.innerText=text
 }
 
-/* STATUS */
-function setStatus(t,x){
-document.getElementById("status").className="status "+t
-document.getElementById("status").innerText=x
+/* RETRY */
+function startRetry(){
+if(retryTimer) return
+retryTimer=setInterval(load,5000)
+}
+
+/* PROMPT */
+function buildPrompt(){
+let words=input.value.trim()
+if(!words) return "Give definitions and examples"
+return `For each word return EXACTLY in this format:
+definition | example
+
+Rules:
+- One line per word
+- Do not add numbering
+- Do not repeat the word
+- Use "|" exactly as separator
+
+${words}`
+}
+
+async function generate(){
+let prompt=buildPrompt()
+try{
+await navigator.clipboard.writeText(prompt)
+}catch{
+alert("Copy failed")
+}
+
+if(!chatTab || chatTab.closed){
+chatTab=window.open("https://chat.openai.com","_blank")
+}else{
+chatTab.focus()
+}
 }
 
 /* PARSE */
 function parse(t){
-if(!t)return{def:"",ex:""}
 if(t.includes("|")){
-let a=t.split("|")
-return{def:a[0].trim(),ex:a.slice(1).join("|").trim()}
+let p=t.split("|")
+return {def:p[0].trim(),ex:p.slice(1).join("|").trim()}
 }
-return{def:t.trim(),ex:""}
+if(t.includes("--")){
+let p=t.split("--")
+return {def:p[0].trim(),ex:p.slice(1).join("--").trim()}
+}
+return {def:t.trim(),ex:""}
 }
 
 /* SAVE */
 async function save(){
-let w=document.getElementById("input").value.split("\n").map(x=>x.trim()).filter(x=>x)
-let l=document.getElementById("chat").value.split("\n")
-let items=[]
+setStatus("syncing","Syncing...")
+
+let w=input.value.split("\n").filter(Boolean)
+let l=chat.value.split("\n").filter(Boolean)
 
 for(let i=0;i<w.length;i++){
-let word=w[i].toLowerCase()
+let word=w[i].toLowerCase().trim()
 let p=parse(l[i]||"")
 
-if(!data[word])data[word]=[]
+if(!data[word]) data[word]=[]
 
 if(!data[word].some(d=>d.def===p.def && d.ex===p.ex)){
 data[word].push(p)
-items.push({word,definition:p.def,example:p.ex})
-}
-}
 
-if(items.length){
 try{
-await fetch(API,{method:"POST",body:JSON.stringify({action:"batch",items})})
-setStatus("online","Saved")
+await fetch(API,{method:"POST",body:JSON.stringify({action:"save",word,definition:p.def,example:p.ex})})
+setStatus("online","Online")
 }catch{
-queue.push(...items)
+queue.push({action:"save",word,definition:p.def,example:p.ex})
 localStorage.setItem("queue",JSON.stringify(queue))
-setStatus("local","Saved offline")
+setStatus("local","Saved locally")
+}
 }
 }
 
 localStorage.setItem("words",JSON.stringify(data))
 render()
+}
+
+/* TEXT */
+function formatText(text,id){
+if(!text) return ""
+let short=text.length>120
+return `
+<div>
+<div class="def ${short?'clamp':''}" id="${id}">${text}</div>
+${short?`<span class="link" onclick="toggleText('${id}',this)">Read more</span>`:""}
+</div>`
+}
+
+function toggleText(id,btn){
+let el=document.getElementById(id)
+if(el.classList.contains("clamp")){
+el.classList.remove("clamp")
+btn.innerText="Show less"
+}else{
+el.classList.add("clamp")
+btn.innerText="Read more"
+}
+}
+
+/* DEFS */
+function renderDefs(arr,word){
+if(!Array.isArray(arr)) arr=[arr]
+
+function block(d,i){
+return `
+<div style="margin-bottom:6px">
+${formatText(d.def,word+"d"+i)}
+${d.ex ? `<div class="example">${d.ex}</div>` : ""}
+</div>`
+}
+
+let first=block(arr[0],0)
+if(arr.length===1) return first
+
+let rest=arr.slice(1).map((d,i)=>block(d,i+1)).join("")
+let id="g"+btoa(word)
+
+return `
+<div>
+${first}
+<div class="more" id="${id}">${rest}</div>
+<span class="link" onclick="toggle('${id}',this)">Show all +${arr.length-1}</span>
+</div>`
+}
+
+function toggle(id,btn){
+let el=document.getElementById(id)
+if(el.classList.contains("open")){
+el.classList.remove("open")
+btn.innerText="Show all"
+}else{
+el.classList.add("open")
+btn.innerText="Hide"
+}
 }
 
 /* LOAD */
 async function load(){
-setStatus("syncing","Loading...")
+let saved=localStorage.getItem("words")
+if(saved) data=JSON.parse(saved)
+
+setStatus("syncing","Syncing...")
 
 try{
-let r=await fetch(API)
+let r=await fetch(API+"?action=getAll",{cache:"no-store"})
+if(!r.ok) throw new Error()
+
 let j=await r.json()
 
-data={}
-
+if(j?.data){
 j.data.forEach(i=>{
 let w=i.word.toLowerCase()
 if(!data[w]) data[w]=[]
-data[w].push({def:i.definition||"",ex:i.example||""})
+let obj={def:i.definition||"",ex:i.example||""}
+if(!data[w].some(d=>d.def===obj.def && d.ex===obj.ex)){
+data[w].push(obj)
+}
 })
+}
 
-localStorage.setItem("words",JSON.stringify(data))
 setStatus("online","Online")
 
 }catch{
-let saved=localStorage.getItem("words")
-data=saved?JSON.parse(saved):{}
-setStatus("offline","Offline")
+setStatus("local","API Error")
+startRetry()
 }
 
+syncQueue()
 render()
+}
+
+/* QUEUE */
+async function syncQueue(){
+if(!queue.length) return
+setStatus("syncing","Syncing...")
+
+let newQ=[]
+for(let item of queue){
+try{
+await fetch(API,{method:"POST",body:JSON.stringify(item)})
+}catch{
+newQ.push(item)
+}
+}
+queue=newQ
+localStorage.setItem("queue",JSON.stringify(queue))
+setStatus("online","Online")
 }
 
 /* RENDER */
 function render(){
-let s=document.getElementById("search").value.toLowerCase()
-let list=Object.keys(data).filter(w=>w.includes(s)).reverse()
+let s=search.value.toLowerCase()
 
-document.getElementById("count").innerText=list.length
+let list=Object.keys(data).filter(w=>{
+if(w.includes(s)) return true
+return data[w].some(d=>d.def.toLowerCase().includes(s)||d.ex.toLowerCase().includes(s))
+}).reverse()
 
-let out=document.getElementById("out")
+count.innerText=list.length
 
 if(view==="table"){
-let h="<table><tr><th>Word</th><th>Details</th></tr>"
+let html="<table><tr><th>Word</th><th>Details</th><th>Actions</th></tr>"
+
 list.forEach(w=>{
-h+=`<tr><td>${w}</td><td>${data[w].map(d=>d.def).join("<br>")}</td></tr>`
+html+=`
+<tr>
+<td>${w}</td>
+<td>${renderDefs(data[w],w)}</td>
+<td>
+<div class="actions">
+<span class="action" onclick="speak('${w}')">🔊</span>
+<span class="action" onclick="editWord('${w}')">✏️</span>
+<span class="action" onclick="del('${w}')">❌</span>
+</div>
+</td>
+</tr>`
 })
-out.innerHTML=h+"</table>"
+
+html+="</table>"
+out.innerHTML=html
+
 }else{
-let h="<div class='cards'>"
+let html="<div class='cards'>"
+
 list.forEach(w=>{
-h+=`<div class="card"><div class="word">${w}</div><div>${data[w].map(d=>d.def).join("<br>")}</div></div>`
+html+=`
+<div class="card">
+<div class="word">${w}</div>
+${renderDefs(data[w],w)}
+<div class="actions">
+<span class="action" onclick="speak('${w}')">🔊</span>
+<span class="action" onclick="editWord('${w}')">✏️</span>
+<span class="action" onclick="del('${w}')">❌</span>
+</div>
+</div>`
 })
-out.innerHTML=h+"</div>"
+
+html+="</div>"
+out.innerHTML=html
 }
 }
 
-function setView(v){
-view=v
-document.getElementById("bt").classList.toggle("active",v==="table")
-document.getElementById("bc").classList.toggle("active",v==="cards")
+function speak(w){speechSynthesis.speak(new SpeechSynthesisUtterance(w))}
+function editWord(w){
+let d=data[w][0]
+let n=prompt("Edit",d.def)
+if(n===null) return
+d.def=n
+localStorage.setItem("words",JSON.stringify(data))
+render()
+}
+function del(w){
+delete data[w]
+localStorage.setItem("words",JSON.stringify(data))
 render()
 }
 
-function clearAll(){
-document.getElementById("input").value=""
-document.getElementById("chat").value=""
+let t
+search.oninput=()=>{clearTimeout(t);t=setTimeout(render,200)}
+
+function setView(v){
+view=v
+bt.classList.toggle("active",v==="table")
+bc.classList.toggle("active",v==="cards")
+render()
 }
 
-document.getElementById("search").oninput=render
+function clearAll(){input.value="";chat.value=""}
+
+window.addEventListener("online",load)
+window.addEventListener("offline",()=>setStatus("offline","Offline"))
 
 load()
 </script>
 
 </body>
 </html>
-```
