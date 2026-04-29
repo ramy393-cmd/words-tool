@@ -1,71 +1,65 @@
-const CACHE_NAME = "words-tool-v2"; // غير الرقم كل مرة تحدث
+// service-worker.js — MBA Vocabulary PWA
+// Strategy: stale-while-revalidate for pages, network-first for API
 
-const ASSETS = [
-  "./",
+const CACHE_VERSION = "v1.0.3"; // bump this on every deploy
+const STATIC_CACHE  = `vocab-static-${CACHE_VERSION}`;
+const STATIC_ASSETS = [
   "./index.html",
-  "./manifest.json",
-  "./icon-192.png",
-  "./icon-512.png"
+  "./style.css",
+  "./script.js",
+  "./manifest.json"
 ];
 
-/* INSTALL */
-self.addEventListener("install", e => {
-  self.skipWaiting(); // يخلي التحديث فوري
-
-  e.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(ASSETS))
+// ── Install: pre-cache static assets ─────────────────────────
+self.addEventListener("install", event => {
+  event.waitUntil(
+    caches.open(STATIC_CACHE).then(cache => cache.addAll(STATIC_ASSETS))
   );
+  self.skipWaiting();
 });
 
-/* ACTIVATE */
-self.addEventListener("activate", e => {
-  e.waitUntil(
+// ── Activate: delete old caches ───────────────────────────────
+self.addEventListener("activate", event => {
+  event.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
-        keys.map(key => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key); // يمسح القديم
-          }
-        })
+        keys
+          .filter(k => k !== STATIC_CACHE)
+          .map(k => caches.delete(k))
       )
     )
   );
-
-  self.clients.claim(); // يطبق التحديث فورًا
+  self.clients.claim();
 });
 
-/* FETCH */
-self.addEventListener("fetch", e => {
-  const req = e.request;
+// ── Fetch ─────────────────────────────────────────────────────
+self.addEventListener("fetch", event => {
+  const url = event.request.url;
 
-  // تجاهل API calls (مهم جداً)
-  if (req.url.includes("script.google.com")) return;
-
-  // Network First للـ HTML (عشان التحديثات)
-  if (req.mode === "navigate") {
-    e.respondWith(
-      fetch(req)
-        .then(res => {
-          return caches.open(CACHE_NAME).then(cache => {
-            cache.put(req, res.clone());
-            return res;
-          });
-        })
-        .catch(() => caches.match(req))
-    );
+  // Always bypass for Google Apps Script API calls
+  if (url.includes("script.google.com")) {
+    event.respondWith(fetch(event.request));
     return;
   }
 
-  // Cache First لباقي الملفات
-  e.respondWith(
-    caches.match(req).then(res => {
-      return res || fetch(req).then(fetchRes => {
-        return caches.open(CACHE_NAME).then(cache => {
-          cache.put(req, fetchRes.clone());
-          return fetchRes;
-        });
-      });
+  // POST requests — always network
+  if (event.request.method !== "GET") {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // Static assets: stale-while-revalidate
+  event.respondWith(
+    caches.open(STATIC_CACHE).then(async cache => {
+      const cached = await cache.match(event.request);
+      const fetchPromise = fetch(event.request).then(networkRes => {
+        if (networkRes && networkRes.status === 200) {
+          cache.put(event.request, networkRes.clone());
+        }
+        return networkRes;
+      }).catch(() => null);
+
+      return cached || fetchPromise;
     })
   );
 });
