@@ -1,55 +1,43 @@
 "use strict";
 
-// CONFIG
 const API_URL = window.APPS_SCRIPT_URL;
 
-const CACHE_KEY = "vocab_words";
-const QUEUE_KEY = "vocab_queue";
-
-// STATE
 let state = {
-  words: [],
-  queue: [],
-  isOnline: navigator.onLine
+  words: []
 };
 
-// NORMALIZE
-function normalizeWord(w) {
-  return String(w).trim().toLowerCase().replace(/\s+/g, " ");
-}
-function normalizeDef(d) {
-  return String(d).trim().toLowerCase().replace(/\s+/g, " ");
-}
+// ================= API =================
+async function apiCall(data) {
+  const formData = new FormData();
+  for (const key in data) formData.append(key, data[key]);
 
-// API (🔥 FIX — NO POST ANYMORE)
-async function apiCall(params) {
-  const url = API_URL + "?" + new URLSearchParams(params).toString();
+  const res = await fetch(API_URL, {
+    method: "POST",
+    body: formData
+  });
 
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error("HTTP " + resp.status);
-
-  const json = await resp.json();
-  if (json.status === "error") throw new Error(json.message);
-
+  const json = await res.json();
   return json.data;
 }
 
-// FETCH WORDS
+// ================= FETCH =================
 async function fetchWords() {
-  try {
-    const data = await apiCall({ action: "GET" });
-    state.words = data;
-    render();
-  } catch (e) {
-    console.error(e);
-  }
+  const data = await apiCall({ action: "GET" });
+  state.words = data;
+  render();
 }
 
-// ADD WORD
-async function addWord(displayWord, def, ex) {
+// ================= ADD =================
+async function addWord() {
+  const word = document.getElementById("wordInput").value.trim();
+  const def = document.getElementById("defInput").value.trim();
+  const ex = document.getElementById("exInput").value.trim();
+
+  if (!word || !def) return;
+
   const result = await apiCall({
     action: "ADD",
-    displayWord,
+    displayWord: word,
     def,
     ex
   });
@@ -58,45 +46,48 @@ async function addWord(displayWord, def, ex) {
   if (idx >= 0) state.words[idx] = result;
   else state.words.unshift(result);
 
-  render();
-}
-
-// DELETE
-async function deleteWord(wordId) {
-  await apiCall({ action: "DELETE", wordId });
-  state.words = state.words.filter(w => w.id !== wordId);
-  render();
-}
-
-// UPDATE
-async function updateEntry(wordId, entryId, def, ex) {
-  const result = await apiCall({
-    action: "UPDATE",
-    wordId,
-    entryId,
-    def,
-    ex
-  });
-
-  const idx = state.words.findIndex(w => w.id === wordId);
-  if (idx >= 0) state.words[idx] = result;
+  document.getElementById("wordInput").value = "";
+  document.getElementById("defInput").value = "";
+  document.getElementById("exInput").value = "";
 
   render();
 }
 
-// PROMPT
-function copyPrompt(word) {
-  const text = `Provide a clear, concise definition of the word "${word}" and one practical example, specifically in an MBA or business context. Use professional language and avoid generic explanations.`;
-
-  navigator.clipboard.writeText(text)
-    .then(() => alert("Prompt copied"))
-    .catch(() => alert("Copy failed"));
+// ================= DELETE =================
+async function deleteWord(id) {
+  await apiCall({ action: "DELETE", id });
+  state.words = state.words.filter(w => w.id !== id);
+  render();
 }
 
-// RENDER (بسيطة)
+// ================= RENDER =================
 function render() {
-  console.log(state.words);
+  const table = document.getElementById("tableBody");
+
+  if (!state.words.length) {
+    table.innerHTML = `<tr><td colspan="3">No data</td></tr>`;
+    return;
+  }
+
+  table.innerHTML = state.words.map(w => `
+    <tr>
+      <td>${w.displayWord}</td>
+      <td>
+        ${w.entries.map(e => `
+          <div>
+            ${e.def}<br>
+            <small style="color:gold">${e.ex || ""}</small>
+          </div>
+        `).join("")}
+      </td>
+      <td>
+        <button onclick="deleteWord('${w.id}')">Delete</button>
+      </td>
+    </tr>
+  `).join("");
 }
 
-// INIT
+// ================= INIT =================
+document.getElementById("addBtn").addEventListener("click", addWord);
+
 fetchWords();
