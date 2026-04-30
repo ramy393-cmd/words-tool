@@ -1,6 +1,13 @@
 function doGet(e) {
-  const action = e.parameter.action;
-  const payload = JSON.parse(e.parameter.payload || "{}");
+  const action = e.parameter.action || "GET";
+
+  let payload = {};
+  try {
+    payload = JSON.parse(e.parameter.payload || "{}");
+  } catch (err) {
+    return jsonResponse({ ok: false, error: "Invalid JSON payload" });
+  }
+
   const sheet = getSheet();
 
   try {
@@ -15,17 +22,19 @@ function doGet(e) {
       const def = (payload.def || "").trim();
       const ex = (payload.ex || "").trim();
 
-      if (!displayWord || !def) throw new Error("Missing data");
+      if (!displayWord || !def) {
+        throw new Error("Missing word or definition");
+      }
 
       const word = normalize(displayWord);
       const data = getAllWords(sheet);
-      let existing = data.find(w => w.word === word);
+      const existing = data.find(w => w.word === word);
 
       if (existing) {
         const exists = existing.entries.some(e => normalize(e.def) === normalize(def));
         if (!exists) {
           existing.entries.push({
-            id: generateId(),   // FIX 1: use generateId() instead of Date.now() twice
+            id: Date.now().toString() + "_" + Math.random().toString(36).slice(2),
             def,
             ex
           });
@@ -33,14 +42,12 @@ function doGet(e) {
         }
         result = existing;
       } else {
-        const wordId  = generateId();             // FIX 1: guaranteed unique IDs
-        const entryId = generateId();
         const newWord = {
-          id: wordId,
+          id: Date.now().toString(),
           word,
           displayWord,
           entries: [{
-            id: entryId,
+            id: Date.now().toString() + "_" + Math.random().toString(36).slice(2),
             def,
             ex
           }],
@@ -64,23 +71,6 @@ function doGet(e) {
       result = true;
     }
 
-    if (action === "UPDATE") {
-      const { id, entryId, def, ex } = payload;
-      const data = getAllWords(sheet);
-      let word = data.find(w => w.id === id);
-
-      if (!word) throw new Error("Word not found");
-
-      let entry = word.entries.find(e => e.id === entryId);
-      if (entry) {
-        entry.def = def;
-        entry.ex = ex;
-        updateRow(sheet, word);
-      }
-
-      result = word;
-    }
-
     return jsonResponse({ ok: true, data: result });
 
   } catch (err) {
@@ -90,19 +80,10 @@ function doGet(e) {
 
 // ===== Helpers =====
 
-function generateId() {
-  // FIX 1: Combines timestamp + random suffix to guarantee uniqueness
-  // even when called multiple times in the same millisecond
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
-
 function getSheet() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
-  // FIX 2: Check for header by reading first row value, not getLastRow()
-  // getLastRow() can return 0 or 1 unreliably on a fresh sheet
-  const firstCell = sheet.getRange(1, 1).getValue();
-  if (!firstCell || firstCell === "") {
-    sheet.appendRow(["id", "word", "displayWord", "entries", "createdAt"]);
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(["id","word","displayWord","entries","createdAt"]);
   }
   return sheet;
 }
@@ -120,11 +101,11 @@ function getAllWords(sheet) {
   }));
 }
 
-function updateRow(sheet, word) {
+function updateRow(sheet, wordObj) {
   const rows = sheet.getDataRange().getValues();
   for (let i = 1; i < rows.length; i++) {
-    if (rows[i][0] === word.id) {
-      sheet.getRange(i + 1, 4).setValue(JSON.stringify(word.entries));
+    if (rows[i][0] === wordObj.id) {
+      sheet.getRange(i + 1, 4).setValue(JSON.stringify(wordObj.entries));
       return;
     }
   }
@@ -140,11 +121,12 @@ function deleteRow(sheet, id) {
   }
 }
 
-function normalize(s) {
-  return String(s).trim().toLowerCase().replace(/\s+/g, " ");
+function normalize(str) {
+  return String(str).trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function jsonResponse(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }
