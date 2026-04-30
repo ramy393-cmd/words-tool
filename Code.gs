@@ -1,10 +1,11 @@
 // ═══════════════════════════════════════════════════════════
-//  MBA Vocabulary — Code.gs
+//  MBA Vocabulary — Code.gs  (v2.0)
 //  Columns: id | word | displayWord | entries | createdAt | updatedAt
 // ═══════════════════════════════════════════════════════════
 
 function doGet(e) {
-  const action = e.parameter.action || "GET";
+  // TASK 10 FIX: always uppercase the action to handle any casing from client
+  const action = (e.parameter.action || "GET").toUpperCase();
 
   let payload = {};
   try {
@@ -75,21 +76,24 @@ function doGet(e) {
 
     // ── UPDATE ───────────────────────────────────────────────
     else if (action === "UPDATE") {
-      const { id, entryId, def, ex } = payload;
+      const id      = String(payload.id || "").trim();
+      const entryId = String(payload.entryId || "").trim();
+      const def     = (payload.def || "").trim();
+      const ex      = (payload.ex  || "").trim();
 
-      if (!id || !entryId || !(def || "").trim()) {
+      if (!id || !entryId || !def) {
         throw new Error("Missing id, entryId, or definition for UPDATE");
       }
 
       const data = getAllWords(sheet);
-      const word = data.find(w => String(w.id) === String(id));
+      const word = data.find(w => String(w.id) === id);
       if (!word) throw new Error("Word not found: " + id);
 
-      const entry = word.entries.find(en => String(en.id) === String(entryId));
+      const entry = word.entries.find(en => String(en.id) === entryId);
       if (!entry) throw new Error("Entry not found: " + entryId);
 
-      entry.def = def.trim();
-      entry.ex  = (ex || "").trim();
+      entry.def = def;
+      entry.ex  = ex;
 
       updateEntriesAndTimestamp(sheet, word);
       result = word;
@@ -97,13 +101,12 @@ function doGet(e) {
 
     // ── DELETE ───────────────────────────────────────────────
     else if (action === "DELETE") {
-      const id = payload.id;
+      const id = String(payload.id || "").trim();
       if (!id) throw new Error("Missing id for DELETE");
 
       // String() coercion on both sides is critical:
-      // Google Sheets returns numeric-looking cell values as JS numbers,
-      // so strict === between a string ID and a number always fails.
-      const deleted = deleteRow(sheet, String(id));
+      // Google Sheets returns numeric-looking cell values as JS numbers.
+      const deleted = deleteRow(sheet, id);
       if (!deleted) throw new Error("Row not found for id: " + id);
 
       result = { deleted: true, id };
@@ -145,7 +148,7 @@ function getAllWords(sheet) {
         const raw = String(r[3] || "").trim();
         if (raw && raw.startsWith("[")) entries = JSON.parse(raw);
       } catch (_) {
-        entries = [];  // corrupted cell: return empty rather than crash the whole GET
+        entries = [];
       }
 
       return {
@@ -176,7 +179,7 @@ function updateEntriesAndTimestamp(sheet, wordObj) {
 function deleteRow(sheet, id) {
   const rows = sheet.getDataRange().getValues();
   for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(id)) {  // String() on both sides — THE fix
+    if (String(rows[i][0]) === String(id)) {
       sheet.deleteRow(i + 1);
       return true;
     }

@@ -1,5 +1,5 @@
 /* ============================================================
-   MBA Vocabulary — Stylesheet
+   MBA Vocabulary — Stylesheet  (v2.1 — UX fixes)
    Aesthetic: Dark luxury editorial / financial terminal
    ============================================================ */
 
@@ -201,6 +201,7 @@ body {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+  flex-wrap: wrap;
 }
 
 /* ── Buttons ───────────────────────────────────────────────── */
@@ -222,39 +223,40 @@ body {
 }
 
 .btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .btn-primary {
   background: var(--gold);
   color: #0a0a0f;
   border-color: var(--gold);
 }
-.btn-primary:hover { background: var(--gold-light); border-color: var(--gold-light); }
+.btn-primary:hover:not(:disabled) { background: var(--gold-light); border-color: var(--gold-light); }
 
 .btn-ghost {
   background: transparent;
   color: var(--text-2);
   border-color: var(--border-2);
 }
-.btn-ghost:hover { background: var(--bg-3); color: var(--text-1); border-color: var(--border-2); }
+.btn-ghost:hover:not(:disabled) { background: var(--bg-3); color: var(--text-1); border-color: var(--border-2); }
 
 .btn-danger {
   background: transparent;
   color: var(--red);
   border-color: rgba(240,101,101,0.3);
 }
-.btn-danger:hover { background: rgba(240,101,101,0.1); }
+.btn-danger:hover:not(:disabled) { background: rgba(240,101,101,0.1); }
 
 .btn-icon {
-  padding: 6px 10px;
-  font-size: 0.8rem;
+  padding: 5px 9px;
+  font-size: 0.78rem;
   border-radius: 8px;
   background: var(--bg-3);
   color: var(--text-2);
   border-color: var(--border);
+  white-space: nowrap;
 }
 .btn-icon:hover { color: var(--text-1); border-color: var(--border-2); background: var(--bg-4); }
-.btn-icon.speak:hover  { color: var(--blue); border-color: rgba(91,141,238,0.4); }
-.btn-icon.prompt:hover { color: var(--gold); border-color: var(--gold-dim); }
+.btn-icon.speak:hover  { color: var(--blue);  border-color: rgba(91,141,238,0.4); }
 .btn-icon.edit:hover   { color: var(--green); border-color: rgba(62,207,142,0.35); }
 .btn-icon.delete:hover { color: var(--red);   border-color: rgba(240,101,101,0.35); }
 
@@ -353,13 +355,15 @@ select.sort-select {
 .table-wrap {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .vocab-table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+  min-width: 600px;
 }
 
 .vocab-table thead tr {
@@ -379,8 +383,8 @@ select.sort-select {
 }
 
 .vocab-table th:nth-child(1) { width: 22%; }
-.vocab-table th:nth-child(2) { width: 58%; }
-.vocab-table th:nth-child(3) { width: 20%; }
+.vocab-table th:nth-child(2) { width: 60%; }
+.vocab-table th:nth-child(3) { width: 18%; }
 
 .vocab-table tbody tr {
   border-bottom: 1px solid var(--border);
@@ -390,68 +394,174 @@ select.sort-select {
 .vocab-table tbody tr:hover { background: rgba(255,255,255,0.025); }
 
 .vocab-table td {
-  padding: 14px 16px;
+  padding: 12px 16px;
   vertical-align: top;
-  word-break: break-word;
-  overflow-wrap: anywhere;
 }
 
+/* ── Error cell ─────────────────────────────────────────────── */
+.error-cell {
+  text-align: center;
+  color: var(--red);
+  padding: 24px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TEXT CLAMP  (Fixes #1, #2, #8)
+
+   Rules:
+   1. .read-more-btn is hidden by default (display:none)
+   2. JS (detectOverflow) sets display:inline-block when needed
+   3. No CSS rule forces the button visible — JS is the sole owner
+   4. .clamp-cell.expanded shows "Show less" (also set by JS)
+   ══════════════════════════════════════════════════════════════ */
+
+.clamp-cell {
+  position: relative;
+  margin-bottom: 6px;
+}
+.clamp-cell:last-child { margin-bottom: 0; }
+
+/* Default: single-line truncation */
+.clamp-text {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Expanded state: allow full wrapping */
+.clamp-cell.expanded .clamp-text {
+  white-space: normal;
+  overflow: visible;
+  display: block;
+  word-break: break-word;
+}
+
+/* ── Read-more button ───────────────────────────────────────────
+   IMPORTANT: display is controlled ONLY by JS (detectOverflow).
+   Do NOT add any CSS rule that sets display to anything other
+   than none here. The .clamp-cell .read-more-btn override that
+   existed in v2.0 caused buttons to always appear — removed.
+─────────────────────────────────────────────────────────────── */
+.read-more-btn {
+  display: none;            /* JS will set to inline-block when needed */
+  background: none;
+  border: none;
+  color: var(--gold);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  line-height: 1;
+}
+.read-more-btn:hover { text-decoration: underline; }
+
+/* Spacing between stacked clamp blocks (e.g. def + example) */
+.clamp-cell + .clamp-cell {
+  margin-top: 6px;
+}
+
+/* ── Word cell ─────────────────────────────────────────────── */
+.word-cell {
+  vertical-align: middle;
+  overflow: hidden;        /* prevent cell content from breaking layout */
+}
+
+/* Plain one-line truncation — no read-more, no expand, ever */
+.word-truncate {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--gold-light);
+  cursor: default;
+}
+
+/* Keep .word-text for any legacy references */
 .word-cell .word-text {
   font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 600;
   color: var(--gold-light);
-  display: block;
 }
 
-.word-cell .word-date {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--text-3);
-  margin-top: 3px;
+/* ── Definition cell ────────────────────────────────────────── */
+.def-cell {
+  overflow: visible;
 }
 
-.entry-block { margin-bottom: 10px; }
+.entry-block {
+  margin-bottom: 12px;
+}
 .entry-block:last-child { margin-bottom: 0; }
 
-.def-text {
+/* Row that holds the clamp-cell + per-entry edit button (Fix #4) */
+.entry-actions-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.entry-actions-row .clamp-cell {
+  flex: 1;
+  min-width: 0;    /* allow flex child to shrink and trigger overflow */
+}
+.entry-edit-btn {
+  flex-shrink: 0;
+  align-self: center;
+  line-height: 1;
+}
+
+/* Visual divider between multiple definitions (Fix #7) */
+.entry-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 10px 0;
+}
+.entry-num {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+
+.entry-def {
   color: var(--text-1);
   font-size: 0.875rem;
   line-height: 1.55;
 }
 
-.ex-text {
-  display: block;
-  margin-top: 4px;
+/* Example text (no inline styles — Fix #3) */
+.entry-ex {
   color: var(--amber);
   font-size: 0.8rem;
   font-style: italic;
-  opacity: 0.85;
+  opacity: 0.9;
+  margin-top: 2px;
 }
 
-.read-more-btn {
-  background: none;
-  border: none;
-  color: var(--gold);
-  font-size: 0.75rem;
-  cursor: pointer;
-  padding: 0;
-  font-family: var(--font-mono);
-  margin-top: 3px;
-}
-.read-more-btn:hover { text-decoration: underline; }
-
+/* ── Show-more defs button ──────────────────────────────────── */
 .show-more-btn {
+  display: inline-block;
   background: none;
   border: none;
   color: var(--blue);
-  font-size: 0.75rem;
+  font-size: 0.73rem;
   cursor: pointer;
-  padding: 3px 0 0;
+  padding: 4px 0 0;
   font-family: var(--font-mono);
+  margin-top: 4px;
 }
 .show-more-btn:hover { text-decoration: underline; }
 
+/* ── Entry count badge ──────────────────────────────────────── */
 .entry-count-badge {
   display: inline-block;
   background: var(--bg-4);
@@ -465,14 +575,31 @@ select.sort-select {
   vertical-align: middle;
 }
 
+/* ── Actions cell ───────────────────────────────────────────── */
 .actions-cell {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: flex-start;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 5px;
+  align-items: center;
+  vertical-align: middle;
+  justify-content: flex-start;
+  padding-left: 0;
 }
 
-/* ── Card View ──────────────────────────────────────────────── */
+/* Uniform 30px height for all action buttons (Goal 5) */
+.actions-cell .btn-icon,
+.entry-edit-btn,
+.card-entry-edit-btn {
+  height: 30px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+}
+
+/* ── Card View  (Fix #3: uses clamp system, no inline styles) ── */
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -499,6 +626,13 @@ select.sort-select {
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;    /* allow flex child to shrink */
+}
+
+/* card-word-clamp kept for safety but card word now uses word-truncate directly */
+.card-word-clamp {
+  flex: 1;
+  min-width: 0;
 }
 
 .card-word {
@@ -506,8 +640,9 @@ select.sort-select {
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--gold-light);
-  word-break: break-word;
   flex: 1;
+  min-width: 0;
+  /* word-truncate class on the element handles overflow */
 }
 
 .card-date {
@@ -516,6 +651,7 @@ select.sort-select {
   color: var(--text-3);
   white-space: nowrap;
   padding-top: 4px;
+  flex-shrink: 0;
 }
 
 .card-entries { flex: 1; }
@@ -534,6 +670,22 @@ select.sort-select {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin-bottom: 4px;
+}
+
+/* Row inside each card entry: text + per-entry edit button (Fix #4) */
+.card-entry-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.card-entry-content {
+  flex: 1;
+  min-width: 0;    /* allow clamp-text overflow detection */
+}
+.card-entry-edit-btn {
+  flex-shrink: 0;
+  align-self: center;
+  line-height: 1;
 }
 
 .card-actions {
@@ -605,6 +757,10 @@ mark {
   line-height: 1.5;
 }
 
+.modal .input-group {
+  margin-bottom: 12px;
+}
+
 .modal-actions {
   display: flex;
   gap: 10px;
@@ -643,20 +799,6 @@ mark {
 .toast.error   { border-color: rgba(240,101,101,0.4); color: var(--red);   }
 .toast.warning { border-color: rgba(240,165,53,0.4);  color: var(--amber); }
 .toast.info    { border-color: rgba(91,141,238,0.35); color: var(--blue);  }
-.toast.undo    { border-color: var(--border-2); color: var(--text-2); }
-
-.toast-undo-btn {
-  background: none;
-  border: none;
-  color: var(--gold);
-  cursor: pointer;
-  font-size: 0.78rem;
-  padding: 0;
-  font-family: var(--font-mono);
-  margin-left: 8px;
-  white-space: nowrap;
-}
-.toast-undo-btn:hover { text-decoration: underline; }
 
 @keyframes toastIn {
   from { opacity: 0; transform: translateX(20px); }
@@ -698,27 +840,6 @@ mark {
 }
 .offline-banner.visible { display: flex; }
 
-/* ── Responsive ─────────────────────────────────────────────── */
-@media (max-width: 700px) {
-  .input-grid { grid-template-columns: 1fr; }
-  .input-grid .input-group.full { grid-column: 1; }
-  .toolbar { gap: 8px; }
-  .search-wrap { min-width: 100%; order: -1; }
-  .cards-grid { grid-template-columns: 1fr; }
-  .table-wrap { display: none; }
-  .toast-container { bottom: 16px; right: 12px; left: 12px; align-items: stretch; }
-  .header-actions { width: 100%; }
-}
-
-@media (min-width: 701px) {
-  .cards-view-wrapper.hidden,
-  .table-view-wrapper.hidden { display: none; }
-}
-
-@media (max-width: 700px) {
-  .table-view-wrapper { display: none !important; }
-}
-
 /* ── Spinner ─────────────────────────────────────────────────── */
 .spinner {
   width: 16px; height: 16px;
@@ -742,38 +863,40 @@ mark {
   font-size: 0.9rem;
 }
 
-/* ── Edit inline ─────────────────────────────────────────────── */
-.entry-edit-form {
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px;
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.entry-edit-form textarea {
-  background: var(--bg-4);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 12px;
-  color: var(--text-1);
-  font-family: var(--font-sans);
-  font-size: 0.85rem;
-  width: 100%;
-  resize: none;
-  outline: none;
-  transition: border-color var(--transition);
-}
-.entry-edit-form textarea:focus { border-color: var(--gold); }
-
-.entry-edit-actions { display: flex; gap: 8px; }
-
 /* ── Divider ─────────────────────────────────────────────────── */
 .divider {
   height: 1px;
   background: var(--border);
   margin: 8px 0;
+}
+
+/* ── Utility ─────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 700px) {
+  .input-grid { grid-template-columns: 1fr; }
+  .input-grid .input-group.full { grid-column: 1; }
+  .toolbar { gap: 8px; }
+  .search-wrap { min-width: 100%; order: -1; }
+  .cards-grid { grid-template-columns: 1fr; }
+  .toast-container { bottom: 16px; right: 12px; left: 12px; align-items: stretch; }
+  .header-actions { width: 100%; }
+  /* On mobile, hide table and always show cards */
+  .table-view-wrapper { display: none !important; }
+  .cards-view-wrapper { display: block !important; }
+  /* Actions cell wraps on narrow screens */
+  .actions-cell { flex-wrap: wrap; }
+  /* Toolbar wraps nicely */
+  .csv-actions { flex-wrap: wrap; }
+  .sort-select { flex: 1; }
+  /* Entry edit buttons stack nicely on mobile */
+  .entry-actions-row { align-items: flex-start; }
+  .card-entry-row { align-items: flex-start; }
+}
+
+@media (min-width: 701px) {
+  /* View wrapper visibility controlled by .hidden class via JS */
+  .cards-view-wrapper.hidden,
+  .table-view-wrapper.hidden { display: none; }
 }
