@@ -1,10 +1,9 @@
 // ═══════════════════════════════════════════════════════════
-//  MBA Vocabulary — Code.gs  (v2.0)
+//  MBA Vocabulary — Code.gs  (v2.1)
 //  Columns: id | word | displayWord | entries | createdAt | updatedAt
 // ═══════════════════════════════════════════════════════════
 
 function doGet(e) {
-  // TASK 10 FIX: always uppercase the action to handle any casing from client
   const action = (e.parameter.action || "GET").toUpperCase();
 
   let payload = {};
@@ -30,6 +29,10 @@ function doGet(e) {
     }
 
     // ── ADD ──────────────────────────────────────────────────
+    // FORCE-MERGE: one word = one row, ALWAYS.
+    // If the normalised displayWord already exists → append entry.
+    // If the exact same definition already exists → skip silently.
+    // Never creates a second row for the same word.
     else if (action === "ADD") {
       const displayWord = (payload.displayWord || "").trim();
       const def         = (payload.def || "").trim();
@@ -41,9 +44,12 @@ function doGet(e) {
 
       const normalized = normalize(displayWord);
       const data       = getAllWords(sheet);
-      const existing   = data.find(w => w.word === normalized);
+
+      // Search by normalised word — catches all casing/spacing variants
+      const existing = data.find(w => w.word === normalized);
 
       if (existing) {
+        // Deduplicate: only append if this exact definition doesn't exist yet
         const isDup = existing.entries.some(en => normalize(en.def) === normalize(def));
         if (!isDup) {
           existing.entries.push({ id: generateId(), def, ex });
@@ -51,6 +57,7 @@ function doGet(e) {
         }
         result = existing;
       } else {
+        // Genuinely new word — create a new row
         const now     = new Date().toISOString();
         const newWord = {
           id:          generateId(),
@@ -104,8 +111,6 @@ function doGet(e) {
       const id = String(payload.id || "").trim();
       if (!id) throw new Error("Missing id for DELETE");
 
-      // String() coercion on both sides is critical:
-      // Google Sheets returns numeric-looking cell values as JS numbers.
       const deleted = deleteRow(sheet, id);
       if (!deleted) throw new Error("Row not found for id: " + id);
 
@@ -152,7 +157,7 @@ function getAllWords(sheet) {
       }
 
       return {
-        id:          String(r[0]),   // always string — prevents === type mismatch
+        id:          String(r[0]),
         word:        String(r[1]),
         displayWord: String(r[2]),
         entries,
