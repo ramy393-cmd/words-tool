@@ -28,7 +28,7 @@ let state = {
   editEntryId:  null,
   search:       "",
   sort:         "newest",
-  view:         isMobile() ? "cards" : "table",
+  view:         isMobile() ? "table" : "table",
   expandedCells: {},
   expandedDefs:  {},
 };
@@ -981,6 +981,8 @@ function render() {
   restoreExpandedCells();
   detectOverflow();
   updateSyncButton();
+  // Re-attach mobile row expand listeners after every render
+  if (isMobile()) attachMobileRowExpand();
 }
 
 function renderTable(words, q) {
@@ -1024,6 +1026,33 @@ function setView(view) {
   else { tableWrapper.classList.add("hidden"); cardsWrapper.classList.remove("hidden"); }
   btns.forEach(b => b.classList.toggle("active", b.dataset.view === view));
   render();
+}
+
+/* ── Mobile table row expand / collapse ─────────────────────── */
+function attachMobileRowExpand() {
+  const tbody = document.getElementById("tableBody");
+  if (!tbody) return;
+
+  tbody.querySelectorAll("tr[data-word-id]").forEach(row => {
+    // Avoid double-binding
+    if (row._mobileExpandBound) return;
+    row._mobileExpandBound = true;
+
+    row.addEventListener("click", function(e) {
+      // Do not expand when tapping action buttons (speak, delete, edit)
+      if (e.target.closest(".btn")) return;
+
+      const isExpanded = this.classList.contains("row-expanded");
+
+      // Collapse all other rows
+      tbody.querySelectorAll("tr.row-expanded").forEach(r => {
+        if (r !== this) r.classList.remove("row-expanded");
+      });
+
+      // Toggle this row
+      this.classList.toggle("row-expanded", !isExpanded);
+    });
+  });
 }
 
 function exportCSV() {
@@ -1205,7 +1234,7 @@ if ("serviceWorker" in navigator && (location.protocol === "http:" || location.p
   dbg("Service worker skipped (file:// or unsupported)");
 }
 
-setView(isMobile() ? "cards" : "table");
+setView("table");
 showLoadingState();
 fetchWords();
 updateOnlineStatus();
