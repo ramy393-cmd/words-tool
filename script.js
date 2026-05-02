@@ -224,36 +224,31 @@ function showEmptyFallback(msg) {
 }
 
 async function fetchWords() {
+  if (state.localWords.length > 0) {
+    state.words = buildDeduplicatedWords(state.localWords);
+    render();
+    updateStats();
+  } else if (state.isOfflineMode) {
+    showEmptyFallback();
+  }
+
   if (state.isOfflineMode) {
     dbg("Offline mode: rendering from localWords");
-    if (state.localWords.length > 0) {
-      state.words = buildDeduplicatedWords(state.localWords);
-      render();
-      updateStats();
-    } else {
-      showEmptyFallback();
-    }
+    if (state.localWords.length === 0) showEmptyFallback();
     return;
   }
 
   try {
     const data = await api("GET");
     state.words = buildDeduplicatedWords(data);
-
     state.words.forEach(w => mergeIntoLocalWords({ ...w, _local: false }));
     saveLocalWords();
-
     render();
     updateStats();
   } catch (err) {
     console.error("Fetch failed:", err);
     dbg("Fetch failed, falling back to localWords");
-    if (state.localWords.length > 0) {
-      state.words = buildDeduplicatedWords(state.localWords);
-      render();
-      updateStats();
-      toast("Offline — showing cached data.", "warning");
-    } else {
+    if (state.localWords.length === 0) {
       showEmptyFallback("Failed to load. Check your connection.");
       toast("Failed to load words. Check your connection.", "error");
     }
@@ -1202,9 +1197,7 @@ if ("serviceWorker" in navigator && (location.protocol === "http:" || location.p
   dbg("Service worker skipped (file:// or unsupported)");
 }
 
-(async () => {
-  setView(isMobile() ? "cards" : "table");
-  showLoadingState();
-  await updateOnlineStatus();
-  await fetchWords();
-})();
+setView(isMobile() ? "cards" : "table");
+showLoadingState();
+fetchWords();
+updateOnlineStatus();
