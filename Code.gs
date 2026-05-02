@@ -28,14 +28,14 @@ function doGet(e) {
 
       const word = normalize(displayWord);
       const data = getAllWords(sheet);
-      const existing = data.find(w => normalize(w.word) === word);
+      const existing = data.find(w => w.word === word);
 
       if (existing) {
         const exists = existing.entries.some(e => normalize(e.def) === normalize(def));
 
         if (!exists) {
           existing.entries.push({
-            id: Date.now().toString(),
+            id: Date.now().toString() + "_" + Math.random().toString(36).slice(2),
             def,
             ex
           });
@@ -51,7 +51,7 @@ function doGet(e) {
           word,
           displayWord,
           entries: [{
-            id: Date.now().toString(),
+            id: Date.now().toString() + "_" + Math.random().toString(36).slice(2),
             def,
             ex
           }],
@@ -68,6 +68,15 @@ function doGet(e) {
 
         result = newWord;
       }
+    }
+
+    else if (action === "DELETE") {
+      deleteRow(sheet, payload.id);
+      result = true;
+    }
+
+    else {
+      throw new Error("Unknown action: " + action);
     }
 
     return jsonResponse({ ok: true, data: result });
@@ -94,10 +103,10 @@ function getAllWords(sheet) {
   if (rows.length < 2) return [];
 
   return rows.slice(1).map(r => ({
-    id: String(r[0]),
+    id: String(r[0]), // FIX
     word: r[1],
     displayWord: r[2],
-    entries: safeParse(r[3]),
+    entries: safeParse(r[3]), // FIX
     createdAt: r[4]
   }));
 }
@@ -106,11 +115,19 @@ function updateRow(sheet, wordObj) {
   const rows = sheet.getDataRange().getValues();
 
   for (let i = 1; i < rows.length; i++) {
-    if (
-      String(rows[i][0]) === String(wordObj.id) ||
-      normalize(rows[i][1]) === normalize(wordObj.word)
-    ) {
+    if (String(rows[i][0]) === String(wordObj.id)) { // FIX
       sheet.getRange(i + 1, 4).setValue(JSON.stringify(wordObj.entries));
+      return;
+    }
+  }
+}
+
+function deleteRow(sheet, id) {
+  const rows = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(id)) { // FIX
+      sheet.deleteRow(i + 1);
       return;
     }
   }
