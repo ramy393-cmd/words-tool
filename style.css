@@ -1,5 +1,5 @@
 /* ============================================================
-   MBA Vocabulary — Stylesheet  (v2.1 — UX fixes)
+   MBA Vocabulary — Stylesheet  (v2.2 — mobile + sync fixes)
    Aesthetic: Dark luxury editorial / financial terminal
    ============================================================ */
 
@@ -44,6 +44,7 @@ body {
   min-height: 100vh;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 /* ── Scrollbar ─────────────────────────────────────────────── */
@@ -57,6 +58,7 @@ body {
   max-width: 1100px;
   margin: 0 auto;
   padding: 0 16px 80px;
+  overflow-x: hidden;
 }
 
 /* ── Header ────────────────────────────────────────────────── */
@@ -98,6 +100,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 /* ── Status Indicator ──────────────────────────────────────── */
@@ -129,6 +132,27 @@ body {
 .status-badge.failed .dot  { background: var(--red); }
 
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── Sync Button ───────────────────────────────────────────── */
+#syncBtn {
+  display: none;
+  background: rgba(240,165,53,0.12);
+  color: var(--amber);
+  border-color: rgba(240,165,53,0.35);
+  font-size: 0.75rem;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid rgba(240,165,53,0.35);
+  white-space: nowrap;
+  transition: all var(--transition);
+  align-items: center;
+  gap: 5px;
+}
+#syncBtn:hover:not(:disabled) { background: rgba(240,165,53,0.22); }
+#syncBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* ── Input Panel ───────────────────────────────────────────── */
 .input-panel {
@@ -352,18 +376,22 @@ select.sort-select {
 .stats-bar .stat span { color: var(--text-2); font-weight: 500; }
 
 /* ── Table View ─────────────────────────────────────────────── */
+.table-view-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
 .table-wrap {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
 }
 
 .vocab-table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  min-width: 600px;
 }
 
 .vocab-table thead tr {
@@ -406,13 +434,7 @@ select.sort-select {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   TEXT CLAMP  (Fixes #1, #2, #8)
-
-   Rules:
-   1. .read-more-btn is hidden by default (display:none)
-   2. JS (detectOverflow) sets display:inline-block when needed
-   3. No CSS rule forces the button visible — JS is the sole owner
-   4. .clamp-cell.expanded shows "Show less" (also set by JS)
+   TEXT CLAMP
    ══════════════════════════════════════════════════════════════ */
 
 .clamp-cell {
@@ -421,7 +443,6 @@ select.sort-select {
 }
 .clamp-cell:last-child { margin-bottom: 0; }
 
-/* Default: single-line truncation */
 .clamp-text {
   display: block;
   white-space: nowrap;
@@ -430,7 +451,6 @@ select.sort-select {
   max-width: 100%;
 }
 
-/* Expanded state: allow full wrapping */
 .clamp-cell.expanded .clamp-text {
   white-space: normal;
   overflow: visible;
@@ -438,14 +458,8 @@ select.sort-select {
   word-break: break-word;
 }
 
-/* ── Read-more button ───────────────────────────────────────────
-   IMPORTANT: display is controlled ONLY by JS (detectOverflow).
-   Do NOT add any CSS rule that sets display to anything other
-   than none here. The .clamp-cell .read-more-btn override that
-   existed in v2.0 caused buttons to always appear — removed.
-─────────────────────────────────────────────────────────────── */
 .read-more-btn {
-  display: none;            /* JS will set to inline-block when needed */
+  display: none;
   background: none;
   border: none;
   color: var(--gold);
@@ -458,7 +472,6 @@ select.sort-select {
 }
 .read-more-btn:hover { text-decoration: underline; }
 
-/* Spacing between stacked clamp blocks (e.g. def + example) */
 .clamp-cell + .clamp-cell {
   margin-top: 6px;
 }
@@ -466,10 +479,9 @@ select.sort-select {
 /* ── Word cell ─────────────────────────────────────────────── */
 .word-cell {
   vertical-align: middle;
-  overflow: hidden;        /* prevent cell content from breaking layout */
+  overflow: hidden;
 }
 
-/* Plain one-line truncation — no read-more, no expand, ever */
 .word-truncate {
   display: block;
   white-space: nowrap;
@@ -483,7 +495,6 @@ select.sort-select {
   cursor: default;
 }
 
-/* Keep .word-text for any legacy references */
 .word-cell .word-text {
   font-family: var(--font-display);
   font-size: 1rem;
@@ -501,7 +512,6 @@ select.sort-select {
 }
 .entry-block:last-child { margin-bottom: 0; }
 
-/* Row that holds the clamp-cell + per-entry edit button (Fix #4) */
 .entry-actions-row {
   display: flex;
   align-items: stretch;
@@ -509,7 +519,7 @@ select.sort-select {
 }
 .entry-actions-row .clamp-cell {
   flex: 1;
-  min-width: 0;    /* allow flex child to shrink and trigger overflow */
+  min-width: 0;
 }
 .entry-edit-btn {
   flex-shrink: 0;
@@ -517,7 +527,6 @@ select.sort-select {
   line-height: 1;
 }
 
-/* Visual divider between multiple definitions (Fix #7) */
 .entry-divider {
   height: 1px;
   background: var(--border);
@@ -538,7 +547,6 @@ select.sort-select {
   line-height: 1.55;
 }
 
-/* Example text (no inline styles — Fix #3) */
 .entry-ex {
   color: var(--amber);
   font-size: 0.8rem;
@@ -575,6 +583,15 @@ select.sort-select {
   vertical-align: middle;
 }
 
+/* ── Local badge ────────────────────────────────────────────── */
+.local-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  margin-left: 4px;
+  vertical-align: middle;
+  opacity: 0.8;
+}
+
 /* ── Actions cell ───────────────────────────────────────────── */
 .actions-cell {
   display: flex;
@@ -587,7 +604,6 @@ select.sort-select {
   padding-left: 0;
 }
 
-/* Uniform 30px height for all action buttons (Goal 5) */
 .actions-cell .btn-icon,
 .entry-edit-btn,
 .card-entry-edit-btn {
@@ -599,7 +615,7 @@ select.sort-select {
   font-size: 0.75rem;
 }
 
-/* ── Card View  (Fix #3: uses clamp system, no inline styles) ── */
+/* ── Card View ── */
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -626,10 +642,9 @@ select.sort-select {
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  min-width: 0;    /* allow flex child to shrink */
+  min-width: 0;
 }
 
-/* card-word-clamp kept for safety but card word now uses word-truncate directly */
 .card-word-clamp {
   flex: 1;
   min-width: 0;
@@ -642,7 +657,6 @@ select.sort-select {
   color: var(--gold-light);
   flex: 1;
   min-width: 0;
-  /* word-truncate class on the element handles overflow */
 }
 
 .card-date {
@@ -672,7 +686,6 @@ select.sort-select {
   margin-bottom: 4px;
 }
 
-/* Row inside each card entry: text + per-entry edit button (Fix #4) */
 .card-entry-row {
   display: flex;
   align-items: flex-start;
@@ -680,7 +693,7 @@ select.sort-select {
 }
 .card-entry-content {
   flex: 1;
-  min-width: 0;    /* allow clamp-text overflow detection */
+  min-width: 0;
 }
 .card-entry-edit-btn {
   flex-shrink: 0;
@@ -875,6 +888,9 @@ mark {
 
 /* ── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 700px) {
+  html, body { overflow-x: hidden; }
+
+  .app-wrapper { padding: 0 12px 80px; }
   .input-grid { grid-template-columns: 1fr; }
   .input-grid .input-group.full { grid-column: 1; }
   .toolbar { gap: 8px; }
@@ -882,21 +898,27 @@ mark {
   .cards-grid { grid-template-columns: 1fr; }
   .toast-container { bottom: 16px; right: 12px; left: 12px; align-items: stretch; }
   .header-actions { width: 100%; }
-  /* On mobile, hide table and always show cards */
+
+  /* Mobile: always show cards, never table */
   .table-view-wrapper { display: none !important; }
   .cards-view-wrapper { display: block !important; }
-  /* Actions cell wraps on narrow screens */
-  .actions-cell { flex-wrap: wrap; }
+
+  /* Hide table view toggle button on mobile (cards always shown) */
+  .view-toggle .vbtn[data-view="table"] { display: none; }
+
   /* Toolbar wraps nicely */
   .csv-actions { flex-wrap: wrap; }
   .sort-select { flex: 1; }
-  /* Entry edit buttons stack nicely on mobile */
+
   .entry-actions-row { align-items: flex-start; }
   .card-entry-row { align-items: flex-start; }
+
+  /* Prevent horizontal scroll from table */
+  .vocab-table { min-width: unset; }
+  .table-wrap { overflow-x: auto; }
 }
 
 @media (min-width: 701px) {
-  /* View wrapper visibility controlled by .hidden class via JS */
   .cards-view-wrapper.hidden,
   .table-view-wrapper.hidden { display: none; }
 }

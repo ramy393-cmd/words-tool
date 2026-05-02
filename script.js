@@ -1,12 +1,7 @@
 "use strict";
 
-// ═══════════════════════════════════════════════════════════
-//  MBA Vocabulary — script.js  (v3.0 — offline-first)
-// ═══════════════════════════════════════════════════════════
-
 const API = window.APPS_SCRIPT_URL;
 
-// ── [NEW] ENVIRONMENT DETECTION ──────────────────────────────────────────────
 const ENV = (() => {
   const proto = location.protocol;
   return {
@@ -16,48 +11,57 @@ const ENV = (() => {
   };
 })();
 
-// ── [NEW] DEBUG LOGGER ────────────────────────────────────────────────────────
 const LOG_PREFIX = "[VocabPWA]";
 function dbg(...args) { console.log(LOG_PREFIX, ...args); }
 
 dbg("Environment →", ENV);
 
-// ═══════════════════════════════════════════════════════════
-//  STATE
-// ═══════════════════════════════════════════════════════════
+const isMobile = () => window.innerWidth <= 700;
 
 let state = {
   words:        [],
-  // [NEW] localWords: full word objects persisted in localStorage
   localWords:   JSON.parse(localStorage.getItem("localWords") || "[]"),
-  // legacy queue kept for backward compatibility; local-first supersedes it
   queue:        JSON.parse(localStorage.getItem("queue") || "[]"),
-  // [NEW] isOfflineMode: true when file://, or navigator is offline, or API unreachable
   isOfflineMode: ENV.isFile || !navigator.onLine,
   editMode:     false,
   editWordId:   null,
   editEntryId:  null,
   search:       "",
   sort:         "newest",
-  view:         "table",
+  view:         isMobile() ? "cards" : "table",
   expandedCells: {},
   expandedDefs:  {},
 };
 
+let _syncInProgress = false;
+
 if (ENV.isFile) dbg("Running in offline mode (file://)");
 
-// ═══════════════════════════════════════════════════════════
-//  [NEW] LOCAL WORDS PERSISTENCE
-//  Full word structure stored in localStorage so the UI can
-//  always render, even with no network at all.
-// ═══════════════════════════════════════════════════════════
+function normalizeDef(def) {
+  return String(def || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function hasDuplicateDef(entries, def) {
+  const nd = normalizeDef(def);
+  return entries.some(e => normalizeDef(e.def) === nd);
+}
+
+function deduplicateEntries(entries) {
+  const seen = new Set();
+  return entries.filter(e => {
+    const key = normalizeDef(e.def);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 function saveLocalWords() {
   localStorage.setItem("localWords", JSON.stringify(state.localWords));
   updateQueueBadge();
+  updateSyncButton();
 }
 
-/** Merge a word object into state.localWords (same logic as mergeResultIntoState). */
 function mergeIntoLocalWords(word) {
   const byId = state.localWords.findIndex(w => w.id === word.id);
   if (byId >= 0) { state.localWords[byId] = word; return; }
@@ -68,32 +72,28 @@ function mergeIntoLocalWords(word) {
   state.localWords.unshift(word);
 }
 
-/** [NEW] Build a temporary local word object when offline. */
 function buildLocalWord(displayWord, def, ex) {
   const id      = "local_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
   const entryId = id + "_e0";
   return {
     id,
     displayWord,
+    word: normalizeWord(displayWord),
     entries: [{ id: entryId, def, ex: ex || "" }],
     createdAt: new Date().toISOString(),
-    _local: true,  // marker so sync knows it needs uploading
+    _local: true,
   };
 }
 
-/** [NEW] Add a new definition to an existing local word. */
 function addLocalDefinition(existingWord, def, ex) {
-  const word  = state.localWords.find(w => w.id === existingWord.id);
+  const word = state.localWords.find(w => w.id === existingWord.id);
   if (!word) return;
-  const entryId = word.id + "_e" + Date.now();
+  if (hasDuplicateDef(word.entries, def)) return;
+  const entryId = word.id + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
   word.entries.push({ id: entryId, def, ex: ex || "" });
   word._local = true;
   saveLocalWords();
 }
-
-// ═══════════════════════════════════════════════════════════
-//  QUEUE PERSISTENCE  (kept for legacy sync compat)
-// ═══════════════════════════════════════════════════════════
 
 function saveQueue() {
   localStorage.setItem("queue", JSON.stringify(state.queue));
@@ -103,7 +103,6 @@ function saveQueue() {
 function updateQueueBadge() {
   const badge = document.getElementById("queueBadge");
   if (!badge) return;
-  // [UPDATED] Show local-unsynced count + legacy queue count
   const localUnsyncedCount = state.localWords.filter(w => w._local).length;
   const total = state.queue.length + localUnsyncedCount;
   if (total > 0) {
@@ -114,9 +113,17 @@ function updateQueueBadge() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-//  TOAST
-// ═══════════════════════════════════════════════════════════
+function updateSyncButton() {
+  const btn = document.getElementById("syncBtn");
+  if (!btn) return;
+  const localUnsyncedCount = state.localWords.filter(w => w._local).length;
+  const total = state.queue.length + localUnsyncedCount;
+  if (total > 0 && !state.isOfflineMode) {
+    btn.style.display = "inline-flex";
+  } else {
+    btn.style.display = "none";
+  }
+}
 
 function toast(msg, type = "info", duration = 3200) {
   const container = document.getElementById("toastContainer");
@@ -130,10 +137,6 @@ function toast(msg, type = "info", duration = 3200) {
     el.addEventListener("animationend", () => el.remove(), { once: true });
   }, duration);
 }
-
-// ═══════════════════════════════════════════════════════════
-//  [NEW] ONLINE / OFFLINE STATUS  (with API reachability check)
-// ═══════════════════════════════════════════════════════════
 
 function setOfflineMode(isOffline) {
   state.isOfflineMode = isOffline;
@@ -150,13 +153,10 @@ function setOfflineMode(isOffline) {
     if (banner) banner.classList.remove("visible");
   }
   updateQueueBadge();
+  updateSyncButton();
 }
 
 async function updateOnlineStatus() {
-  const badge  = document.getElementById("statusBadge");
-  const banner = document.getElementById("offlineBanner");
-
-  // file:// always offline
   if (ENV.isFile) {
     setOfflineMode(true);
     dbg("Running in offline mode");
@@ -169,21 +169,18 @@ async function updateOnlineStatus() {
     return;
   }
 
-  // [NEW] Probe API reachability with a lightweight ping
   if (API) {
     try {
       const params = new URLSearchParams({ action: "PING", t: Date.now() });
       const res = await fetch(API + "?" + params, { signal: AbortSignal.timeout(5000) });
       if (!res.ok) throw new Error("HTTP " + res.status);
       setOfflineMode(false);
-      // Trigger sync on every transition to online
       syncLocalToServer();
     } catch {
       dbg("API unreachable — forcing offline mode");
       setOfflineMode(true);
     }
   } else {
-    // No API configured — always offline
     setOfflineMode(true);
     dbg("Running in offline mode (no API configured)");
   }
@@ -191,10 +188,6 @@ async function updateOnlineStatus() {
 
 window.addEventListener("online",  () => { dbg("Browser online event"); updateOnlineStatus(); });
 window.addEventListener("offline", () => { dbg("Browser offline event"); setOfflineMode(true); });
-
-// ═══════════════════════════════════════════════════════════
-//  API  (GET-tunneling)
-// ═══════════════════════════════════════════════════════════
 
 async function api(action, payload = {}) {
   if (!API) throw new Error("No API configured");
@@ -211,55 +204,42 @@ async function api(action, payload = {}) {
   return json.data;
 }
 
-// ═══════════════════════════════════════════════════════════
-//  WORD NORMALIZATION
-//  IMPORTANT: Must match the normalization in Code.gs (backend)
-//  Backend should use: word.trim().toLowerCase().replace(/\s+/g, " ")
-// ═══════════════════════════════════════════════════════════
-
 function normalizeWord(word) {
   return String(word).trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-// ═══════════════════════════════════════════════════════════
-//  FETCH (with localWords fallback)
-// ═══════════════════════════════════════════════════════════
+function showLoadingState() {
+  const tbody = document.getElementById("tableBody");
+  const grid  = document.getElementById("cardsGrid");
+  if (tbody) tbody.innerHTML = `<tr><td colspan="3"><div class="loading-state"><span class="spinner"></span> Loading…</div></td></tr>`;
+  if (grid)  grid.innerHTML  = `<div class="loading-state"><span class="spinner"></span> Loading…</div>`;
+}
+
+function showEmptyFallback(msg) {
+  const tbody = document.getElementById("tableBody");
+  const grid  = document.getElementById("cardsGrid");
+  const html  = msg || "No words yet. Add your first one above.";
+  if (tbody) tbody.innerHTML = `<tr><td colspan="3"><div class="empty-state"><div class="empty-icon">📖</div><p>${html}</p></div></td></tr>`;
+  if (grid)  grid.innerHTML  = `<div class="empty-state"><div class="empty-icon">📖</div><p>${html}</p></div>`;
+}
 
 async function fetchWords() {
-  // [NEW] If offline mode, render from localWords immediately
   if (state.isOfflineMode) {
     dbg("Offline mode: rendering from localWords");
     if (state.localWords.length > 0) {
-      state.words = [...state.localWords];
+      state.words = buildDeduplicatedWords(state.localWords);
       render();
       updateStats();
     } else {
-      // Show empty state rather than stuck spinner
-      const tbody = document.getElementById("tableBody");
-      if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="3"><div class="empty-state"><div class="empty-icon">📖</div><p>No words yet. Add your first one above.</p></div></td></tr>`;
-      }
+      showEmptyFallback();
     }
     return;
   }
 
   try {
     const data = await api("GET");
-    const seen = new Map();
-    data.reverse().forEach(w => {
-      const key = normalizeWord(w.displayWord);
-      if (!seen.has(key)) {
-        seen.set(key, w);
-      } else {
-        const existing = seen.get(key);
-        if ((w.entries || []).length > (existing.entries || []).length) {
-          seen.set(key, w);
-        }
-      }
-    });
-    state.words = Array.from(seen.values());
+    state.words = buildDeduplicatedWords(data);
 
-    // [NEW] Merge server words into localWords so local cache stays fresh
     state.words.forEach(w => mergeIntoLocalWords({ ...w, _local: false }));
     saveLocalWords();
 
@@ -268,60 +248,85 @@ async function fetchWords() {
   } catch (err) {
     console.error("Fetch failed:", err);
     dbg("Fetch failed, falling back to localWords");
-    // [NEW] Fallback: render from localWords instead of showing error
     if (state.localWords.length > 0) {
-      state.words = [...state.localWords];
+      state.words = buildDeduplicatedWords(state.localWords);
       render();
       updateStats();
       toast("Offline — showing cached data.", "warning");
     } else {
-      document.getElementById("tableBody").innerHTML =
-        `<tr><td colspan="3" class="error-cell">Failed to load. Check your connection.</td></tr>`;
+      showEmptyFallback("Failed to load. Check your connection.");
       toast("Failed to load words. Check your connection.", "error");
     }
-    // Force offline mode so subsequent adds go local
     state.isOfflineMode = true;
+    updateSyncButton();
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-//  MERGE HELPER
-// ═══════════════════════════════════════════════════════════
+function buildDeduplicatedWords(data) {
+  const seen = new Map();
+  const arr  = Array.isArray(data) ? [...data] : [];
+
+  arr.forEach(w => {
+    const key = normalizeWord(w.displayWord || "");
+    if (!seen.has(key)) {
+      seen.set(key, { ...w, entries: deduplicateEntries(Array.isArray(w.entries) ? [...w.entries] : []) });
+    } else {
+      const existing = seen.get(key);
+      const incomingEntries = Array.isArray(w.entries) ? w.entries : [];
+      const merged = [...existing.entries];
+      incomingEntries.forEach(e => {
+        if (!hasDuplicateDef(merged, e.def)) {
+          merged.push(e);
+        }
+      });
+      const base = (w.createdAt && existing.createdAt && w.createdAt < existing.createdAt) ? w : existing;
+      seen.set(key, { ...base, entries: merged });
+    }
+  });
+
+  return Array.from(seen.values());
+}
 
 function mergeResultIntoState(result) {
-  const byId = state.words.findIndex(w => w.id === result.id);
-  if (byId >= 0) { state.words[byId] = result; return; }
+  const byId = state.words.findIndex(w => String(w.id) === String(result.id));
+  if (byId >= 0) {
+    state.words[byId] = { ...result };
+    return;
+  }
   const byName = state.words.findIndex(
     w => normalizeWord(w.displayWord) === normalizeWord(result.displayWord)
   );
-  if (byName >= 0) { state.words[byName] = result; return; }
-  state.words.unshift(result);
+  if (byName >= 0) {
+    state.words[byName] = { ...result };
+    return;
+  }
+  state.words.unshift({ ...result });
 }
 
-// ═══════════════════════════════════════════════════════════
-//  [NEW] SYNC ENGINE — syncLocalToServer()
-//  Pushes all _local:true words from localWords to the server.
-//  Runs after coming back online. Handles partial failures,
-//  retries implicitly on next online event. No duplicates.
-// ═══════════════════════════════════════════════════════════
-
 async function syncLocalToServer() {
+  if (_syncInProgress) return;
+
   const localDirty = state.localWords.filter(w => w._local);
   const hasQueue   = state.queue.length > 0;
 
   if (!localDirty.length && !hasQueue) return;
   if (!navigator.onLine || state.isOfflineMode) return;
 
+  _syncInProgress = true;
   dbg("Sync started — localDirty:", localDirty.length, "queue:", state.queue.length);
 
-  const badge = document.getElementById("statusBadge");
+  const badge  = document.getElementById("statusBadge");
+  const syncBtn = document.getElementById("syncBtn");
   if (badge) { badge.className = "status-badge syncing"; badge.querySelector(".label").textContent = "Syncing…"; }
+  if (syncBtn) { syncBtn.disabled = true; syncBtn.textContent = "⟳ Syncing…"; }
 
   let syncedCount = 0;
   let failedCount = 0;
 
-  // 1. Sync local-first words (full word objects)
   for (const localWord of localDirty) {
+    let allEntriesSynced = true;
+    let serverResult = null;
+
     for (const entry of localWord.entries) {
       try {
         const result = await api("ADD", {
@@ -329,21 +334,24 @@ async function syncLocalToServer() {
           def: entry.def,
           ex:  entry.ex || "",
         });
+        serverResult = result;
         mergeResultIntoState(result);
-        // Update localWords with server version (replace local id with real id)
-        const idx = state.localWords.findIndex(w => w.id === localWord.id);
-        if (idx >= 0) {
-          state.localWords[idx] = { ...result, _local: false };
-        }
         syncedCount++;
       } catch (err) {
         dbg("Sync failed for word:", localWord.displayWord, err.message);
+        allEntriesSynced = false;
         failedCount++;
+      }
+    }
+
+    if (allEntriesSynced && serverResult) {
+      const idx = state.localWords.findIndex(w => w.id === localWord.id);
+      if (idx >= 0) {
+        state.localWords[idx] = { ...serverResult, _local: false };
       }
     }
   }
 
-  // 2. Sync legacy queue items
   const pending   = [...state.queue];
   state.queue     = [];
   for (const item of pending) {
@@ -360,7 +368,14 @@ async function syncLocalToServer() {
   saveLocalWords();
   saveQueue();
 
+  _syncInProgress = false;
+
   if (badge) { badge.className = "status-badge online"; badge.querySelector(".label").textContent = "Online"; }
+  if (syncBtn) {
+    syncBtn.disabled = false;
+    syncBtn.textContent = "⟳ Sync";
+    updateSyncButton();
+  }
 
   if (failedCount === 0) {
     dbg("Sync success — synced:", syncedCount);
@@ -370,8 +385,7 @@ async function syncLocalToServer() {
     toast(`Synced ${syncedCount}, ${failedCount} still pending.`, "warning");
   }
 
-  // After sync: refresh from server to get canonical IDs
-  if (syncedCount > 0 && !failedCount) {
+  if (syncedCount > 0) {
     await fetchWords();
   } else {
     render();
@@ -379,9 +393,15 @@ async function syncLocalToServer() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-//  GENERATE PROMPT
-// ═══════════════════════════════════════════════════════════
+async function manualSync() {
+  if (_syncInProgress) { toast("Sync already in progress…", "info"); return; }
+  const syncBtn = document.getElementById("syncBtn");
+  if (syncBtn) syncBtn.disabled = true;
+  await syncLocalToServer();
+  if (!state.isOfflineMode) {
+    await fetchWords();
+  }
+}
 
 async function generatePrompt() {
   const wordEl = document.getElementById("wordInput");
@@ -403,10 +423,6 @@ async function generatePrompt() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-//  ADD  — [UPDATED] Always succeeds locally; syncs when online
-// ═══════════════════════════════════════════════════════════
-
 async function addWord() {
   const wordEl = document.getElementById("wordInput");
   const defEl  = document.getElementById("defInput");
@@ -422,12 +438,19 @@ async function addWord() {
 
   const normalized = normalizeWord(word);
   const existing   = state.words.find(w => normalizeWord(w.displayWord) === normalized);
-  if (existing) { openMergeModal(existing, word, def, ex); return; }
+
+  if (existing) {
+    if (hasDuplicateDef(existing.entries, def)) {
+      toast("This definition already exists for this word.", "warning");
+      return;
+    }
+    openMergeModal(existing, word, def, ex);
+    return;
+  }
 
   addBtn.disabled    = true;
   addBtn.textContent = "Saving…";
 
-  // [NEW] ALWAYS update local state immediately (no blocking on network)
   const localWord = buildLocalWord(word, def, ex);
   mergeIntoLocalWords(localWord);
   mergeResultIntoState(localWord);
@@ -439,7 +462,6 @@ async function addWord() {
   render();
   updateStats();
 
-  // [NEW] Attempt network sync in background (non-blocking)
   if (!state.isOfflineMode) {
     _pushWordToServer(localWord, word, def, ex);
   } else {
@@ -448,14 +470,36 @@ async function addWord() {
   }
 }
 
-/** [NEW] Push a single word+entry to server, replace local placeholder if success. */
 async function _pushWordToServer(localWord, displayWord, def, ex) {
   try {
     const result = await api("ADD", { displayWord, def, ex });
-    // Replace local placeholder with server result
-    mergeResultIntoState(result);
-    const idx = state.localWords.findIndex(w => w.id === localWord.id);
-    if (idx >= 0) state.localWords[idx] = { ...result, _local: false };
+    const oldId = localWord.id;
+
+    const byId   = state.words.findIndex(w => String(w.id) === String(result.id));
+    const byOld  = state.words.findIndex(w => String(w.id) === String(oldId));
+    const byName = state.words.findIndex(w => normalizeWord(w.displayWord) === normalizeWord(result.displayWord));
+
+    if (byId >= 0) {
+      state.words[byId] = { ...result };
+    } else if (byOld >= 0) {
+      state.words[byOld] = { ...result };
+    } else if (byName >= 0) {
+      state.words[byName] = { ...result };
+    } else {
+      state.words.unshift({ ...result });
+    }
+
+    const lidxById  = state.localWords.findIndex(w => w.id === oldId);
+    const lidxByName = state.localWords.findIndex(w => normalizeWord(w.displayWord) === normalizeWord(displayWord));
+
+    if (lidxById >= 0) {
+      state.localWords[lidxById] = { ...result, _local: false };
+    } else if (lidxByName >= 0) {
+      state.localWords[lidxByName] = { ...result, _local: false };
+    } else {
+      mergeIntoLocalWords({ ...result, _local: false });
+    }
+
     saveLocalWords();
     render();
     updateStats();
@@ -463,11 +507,8 @@ async function _pushWordToServer(localWord, displayWord, def, ex) {
   } catch (err) {
     dbg("Push to server failed:", err.message, "— will retry on next sync");
     toast("Saved locally. Will sync when online.", "warning");
-    // Already in localWords with _local:true, will sync later
   }
 }
-
-// ─── Merge Modal ──────────────────────────────────────────
 
 let _pendingMerge = null;
 
@@ -484,18 +525,34 @@ async function confirmMerge() {
   const { existingWord, displayWord, def, ex } = _pendingMerge;
   _pendingMerge = null;
 
+  const currentWord = state.words.find(w => String(w.id) === String(existingWord.id));
+  const checkWord   = currentWord || existingWord;
+  if (hasDuplicateDef(checkWord.entries, def)) {
+    toast("This definition already exists for this word.", "warning");
+    return;
+  }
+
   const addBtn = document.getElementById("addBtn");
   addBtn.disabled    = true;
   addBtn.textContent = "Saving…";
 
-  // [NEW] Always update locally first
-  addLocalDefinition(existingWord, def, ex);
-  // Also update state.words for immediate UI
-  const stateWord = state.words.find(w => w.id === existingWord.id);
+  const newEntryId = existingWord.id + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
+  const newEntry   = { id: newEntryId, def, ex: ex || "" };
+
+  const stateWord = state.words.find(w => String(w.id) === String(existingWord.id));
   if (stateWord) {
-    const entryId = existingWord.id + "_e" + Date.now();
-    stateWord.entries.push({ id: entryId, def, ex: ex || "" });
+    stateWord.entries = [...stateWord.entries, newEntry];
   }
+
+  const localWord = state.localWords.find(w => String(w.id) === String(existingWord.id));
+  if (localWord) {
+    localWord.entries = [...localWord.entries, newEntry];
+    localWord._local  = true;
+  } else {
+    const combined = stateWord || existingWord;
+    mergeIntoLocalWords({ ...combined, _local: true });
+  }
+  saveLocalWords();
 
   document.getElementById("wordInput").value = "";
   document.getElementById("defInput").value  = "";
@@ -508,10 +565,17 @@ async function confirmMerge() {
   if (!state.isOfflineMode) {
     try {
       const result = await api("ADD", { displayWord, def, ex });
-      mergeResultIntoState(result);
-      // Update localWords with authoritative server version
-      const idx = state.localWords.findIndex(w => normalizeWord(w.displayWord) === normalizeWord(displayWord));
-      if (idx >= 0) state.localWords[idx] = { ...result, _local: false };
+      const byId   = state.words.findIndex(w => String(w.id) === String(result.id));
+      const byName = state.words.findIndex(w => normalizeWord(w.displayWord) === normalizeWord(result.displayWord));
+      if (byId >= 0) {
+        state.words[byId] = { ...result };
+      } else if (byName >= 0) {
+        state.words[byName] = { ...result };
+      } else {
+        state.words.unshift({ ...result });
+      }
+      const lidx = state.localWords.findIndex(w => normalizeWord(w.displayWord) === normalizeWord(displayWord));
+      if (lidx >= 0) state.localWords[lidx] = { ...result, _local: false };
       saveLocalWords();
       render();
       updateStats();
@@ -530,14 +594,10 @@ function closeMergeModal() {
   _pendingMerge = null;
 }
 
-// ═══════════════════════════════════════════════════════════
-//  EDIT MODAL
-// ═══════════════════════════════════════════════════════════
-
 function openEditModal(wordId, entryId) {
-  const word  = state.words.find(w => w.id === wordId);
-  const entry = word?.entries.find(e => e.id === entryId);
-  if (!word || !entry) return;
+  const word  = state.words.find(w => String(w.id) === String(wordId));
+  const entry = word?.entries.find(e => String(e.id) === String(entryId));
+  if (!word || !entry) { dbg("openEditModal: word/entry not found", wordId, entryId); return; }
   document.getElementById("editWordId").value  = wordId;
   document.getElementById("editEntryId").value = entryId;
   document.getElementById("editDef").value     = entry.def;
@@ -560,20 +620,29 @@ async function saveEdit() {
   saveBtn.disabled    = true;
   saveBtn.textContent = "Saving…";
 
-  // [NEW] Update locally first
-  const localWord = state.localWords.find(w => w.id === wordId);
+  const stateWord = state.words.find(w => String(w.id) === String(wordId));
+  if (stateWord) {
+    const otherEntries = stateWord.entries.filter(e => String(e.id) !== String(entryId));
+    if (hasDuplicateDef(otherEntries, def)) {
+      toast("This definition already exists for this word.", "warning");
+      saveBtn.disabled    = false;
+      saveBtn.textContent = "Save Changes";
+      return;
+    }
+    const entry = stateWord.entries.find(e => String(e.id) === String(entryId));
+    if (entry) { entry.def = def; entry.ex = ex; }
+  }
+
+  const localWord = state.localWords.find(w => String(w.id) === String(wordId));
   if (localWord) {
-    const entry = localWord.entries.find(e => e.id === entryId);
+    const entry = localWord.entries.find(e => String(e.id) === String(entryId));
     if (entry) { entry.def = def; entry.ex = ex; }
     localWord._local = true;
-    saveLocalWords();
+  } else if (stateWord) {
+    mergeIntoLocalWords({ ...stateWord, _local: true });
   }
-  // Update state.words immediately for UI
-  const stateWord = state.words.find(w => w.id === wordId);
-  if (stateWord) {
-    const entry = stateWord.entries.find(e => e.id === entryId);
-    if (entry) { entry.def = def; entry.ex = ex; }
-  }
+  saveLocalWords();
+
   closeEditModal();
   render();
   updateStats();
@@ -581,13 +650,15 @@ async function saveEdit() {
   if (!state.isOfflineMode) {
     try {
       const result = await api("UPDATE", { id: wordId, entryId, def, ex });
-      const idx = state.words.findIndex(w => w.id === result.id);
-      if (idx >= 0) state.words[idx] = result;
-      const lidx = state.localWords.findIndex(w => w.id === result.id);
-      if (lidx >= 0) state.localWords[lidx] = { ...result, _local: false };
-      saveLocalWords();
-      render();
-      updateStats();
+      if (result && result.id) {
+        const idx = state.words.findIndex(w => String(w.id) === String(result.id));
+        if (idx >= 0) state.words[idx] = { ...result };
+        const lidx = state.localWords.findIndex(w => String(w.id) === String(result.id));
+        if (lidx >= 0) state.localWords[lidx] = { ...result, _local: false };
+        saveLocalWords();
+        render();
+        updateStats();
+      }
       toast("Updated!", "success");
     } catch (err) {
       console.error("Update failed:", err);
@@ -601,7 +672,6 @@ async function saveEdit() {
   saveBtn.textContent = "Save Changes";
 }
 
-// ─── Legacy inline edit (startEdit) — kept for backward compat ─
 function startEdit(wordId, entryId) { openEditModal(wordId, entryId); }
 
 function cancelEdit() {
@@ -621,34 +691,49 @@ function cancelEdit() {
   render();
 }
 
-// ═══════════════════════════════════════════════════════════
-//  UPDATE
-// ═══════════════════════════════════════════════════════════
-
 async function updateWord(displayWord, def, ex) {
   const addBtn = document.getElementById("addBtn");
   addBtn.disabled    = true;
   addBtn.textContent = "Updating…";
+
+  const stateWord = state.words.find(w => String(w.id) === String(state.editWordId));
+  if (stateWord) {
+    const entry = stateWord.entries.find(e => String(e.id) === String(state.editEntryId));
+    if (entry) { entry.def = def; entry.ex = ex; }
+  }
+
+  const localWord = state.localWords.find(w => String(w.id) === String(state.editWordId));
+  if (localWord) {
+    const entry = localWord.entries.find(e => String(e.id) === String(state.editEntryId));
+    if (entry) { entry.def = def; entry.ex = ex; }
+    localWord._local = true;
+  } else if (stateWord) {
+    mergeIntoLocalWords({ ...stateWord, _local: true });
+  }
+  saveLocalWords();
+
   try {
-    const result = await api("UPDATE", { id: state.editWordId, entryId: state.editEntryId, def, ex });
-    const idx = state.words.findIndex(w => w.id === result.id);
-    if (idx >= 0) state.words[idx] = result;
-    toast("Updated!", "success");
+    if (!state.isOfflineMode) {
+      const result = await api("UPDATE", { id: state.editWordId, entryId: state.editEntryId, def, ex });
+      const idx = state.words.findIndex(w => String(w.id) === String(result.id));
+      if (idx >= 0) state.words[idx] = { ...result };
+      const lidx = state.localWords.findIndex(w => String(w.id) === String(result.id));
+      if (lidx >= 0) state.localWords[lidx] = { ...result, _local: false };
+      saveLocalWords();
+      toast("Updated!", "success");
+    } else {
+      toast("Saved locally. Will sync when online.", "warning");
+    }
   } catch (err) {
     console.error("Update failed:", err);
-    toast("Update failed: " + err.message, "error");
+    toast("Saved locally. Will sync when online.", "warning");
   }
   cancelEdit();
 }
 
-// ═══════════════════════════════════════════════════════════
-//  DELETE
-// ═══════════════════════════════════════════════════════════
-
 async function deleteWord(id) {
   if (!confirm("Delete this word and all its definitions?")) return;
 
-  // [NEW] Remove locally immediately
   state.words      = state.words.filter(w => String(w.id) !== String(id));
   state.localWords = state.localWords.filter(w => String(w.id) !== String(id));
   saveLocalWords();
@@ -666,17 +751,9 @@ async function deleteWord(id) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-//  [UPDATED] LEGACY syncQueue — now calls syncLocalToServer
-// ═══════════════════════════════════════════════════════════
-
 async function syncQueue() {
   await syncLocalToServer();
 }
-
-// ═══════════════════════════════════════════════════════════
-//  SPEECH
-// ═══════════════════════════════════════════════════════════
 
 function speak(text) {
   if (!("speechSynthesis" in window)) { toast("Speech not supported in this browser.", "warning"); return; }
@@ -685,10 +762,6 @@ function speak(text) {
   u.lang  = "en-US";
   speechSynthesis.speak(u);
 }
-
-// ═══════════════════════════════════════════════════════════
-//  SEARCH + SORT + FILTER
-// ═══════════════════════════════════════════════════════════
 
 function getFilteredWords() {
   let words = [...state.words];
@@ -718,10 +791,6 @@ function highlight(text, query) {
   return escaped.replace(re, "<mark>$1</mark>");
 }
 
-// ═══════════════════════════════════════════════════════════
-//  STATS
-// ═══════════════════════════════════════════════════════════
-
 function updateStats() {
   const filtered  = getFilteredWords();
   const totalDefs = state.words.reduce((s, w) => s + w.entries.length, 0);
@@ -730,10 +799,6 @@ function updateStats() {
   if (el("statDefs"))   el("statDefs").textContent   = totalDefs;
   if (el("statShown"))  el("statShown").textContent  = filtered.length;
 }
-
-// ═══════════════════════════════════════════════════════════
-//  READ-MORE (CLAMP) TOGGLE
-// ═══════════════════════════════════════════════════════════
 
 function toggleReadMore(btn) {
   const cell = btn.closest(".clamp-cell");
@@ -747,10 +812,6 @@ function toggleReadMore(btn) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-//  OVERFLOW DETECTION
-// ═══════════════════════════════════════════════════════════
-
 function detectOverflow() {
   requestAnimationFrame(() => {
     document.querySelectorAll(".clamp-cell").forEach(cell => {
@@ -758,7 +819,8 @@ function detectOverflow() {
       const btn  = cell.querySelector(".read-more-btn");
       if (!text || !btn) return;
       if (cell.classList.contains("expanded")) { btn.style.display = "inline-block"; return; }
-      btn.style.display = text.scrollWidth > text.clientWidth + 1 ? "inline-block" : "none";
+      const isOverflowing = text.scrollWidth > text.clientWidth + 1 || text.scrollHeight > text.clientHeight + 1;
+      btn.style.display = isOverflowing ? "inline-block" : "none";
     });
   });
 }
@@ -773,33 +835,25 @@ function restoreExpandedCells() {
   });
 }
 
-// ═══════════════════════════════════════════════════════════
-//  SHOW-MORE DEFS TOGGLE
-// ═══════════════════════════════════════════════════════════
-
 function toggleShowMoreDefs(wordId) {
   state.expandedDefs[wordId] = !state.expandedDefs[wordId];
-  const row = document.querySelector(`tr[data-word-id="${wordId}"]`);
+  const row = document.querySelector(`tr[data-word-id="${CSS.escape(wordId)}"]`);
   if (!row) { render(); return; }
   const defCell = row.querySelector(".def-cell");
   if (!defCell) return;
-  const word = state.words.find(w => w.id === wordId);
+  const word = state.words.find(w => String(w.id) === String(wordId));
   if (!word) return;
-  defCell.innerHTML = buildDefCellHtml(word, state.search);
+  defCell.innerHTML = buildDefCellHtml(word, state.search.trim().toLowerCase());
   restoreExpandedCells();
   detectOverflow();
 }
-
-// ═══════════════════════════════════════════════════════════
-//  BUILD TABLE HTML HELPERS
-// ═══════════════════════════════════════════════════════════
 
 function buildDefCellHtml(w, q) {
   const allEntries = Array.isArray(w.entries) && w.entries.length > 0
     ? w.entries
     : [{ id: w.id + "-0", def: w.def || "", ex: w.ex || "" }];
 
-  const expanded = !!state.expandedDefs[w.id];
+  const expanded = !!state.expandedDefs[String(w.id)];
   const entries  = expanded ? allEntries : allEntries.slice(0, 1);
   const hasMore  = allEntries.length > 1;
 
@@ -844,7 +898,7 @@ function buildDefCellHtml(w, q) {
 
 function buildTableRow(w, q) {
   return `
-    <tr data-word-id="${escAttr(w.id)}">
+    <tr data-word-id="${escAttr(String(w.id))}">
       <td class="word-cell">
         <span class="word-text word-truncate" title="${escAttr(w.displayWord)}">${highlight(w.displayWord, q)}</span>
         ${w.entries.length > 1 ? `<span class="entry-count-badge">${w.entries.length}</span>` : ""}
@@ -853,12 +907,10 @@ function buildTableRow(w, q) {
       <td class="def-cell">${buildDefCellHtml(w, q)}</td>
       <td class="actions-cell">
         <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Pronounce">🔊</button>
-        <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(w.id)}')" title="Delete word">🗑</button>
+        <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(String(w.id))}')" title="Delete word">🗑</button>
       </td>
     </tr>`;
 }
-
-// ── Card HTML ──────────────────────────────────────────────
 
 function buildCardHtml(w, q) {
   const entriesHtml = w.entries.map((e, i) => {
@@ -879,13 +931,13 @@ function buildCardHtml(w, q) {
                 <button class="read-more-btn" onclick="toggleReadMore(this)">Read more ▼</button>
               </div>` : ""}
           </div>
-          <button class="btn btn-icon edit card-entry-edit-btn" onclick="openEditModal('${escAttr(w.id)}','${escAttr(e.id)}')" title="Edit this definition">✏️</button>
+          <button class="btn btn-icon edit card-entry-edit-btn" onclick="openEditModal('${escAttr(String(w.id))}','${escAttr(String(e.id))}')" title="Edit this definition">✏️</button>
         </div>
       </div>`;
   }).join('<div class="entry-divider"></div>');
 
   return `
-    <div class="vocab-card" data-word-id="${escAttr(w.id)}">
+    <div class="vocab-card" data-word-id="${escAttr(String(w.id))}">
       <div class="card-header">
         <div class="card-word word-truncate" title="${escAttr(w.displayWord)}">${highlight(w.displayWord, q)}</div>
         ${w._local ? `<span class="local-badge" title="Not yet synced">⏳</span>` : ""}
@@ -894,7 +946,7 @@ function buildCardHtml(w, q) {
       <div class="card-entries">${entriesHtml}</div>
       <div class="card-actions">
         <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Pronounce">🔊 Speak</button>
-        <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(w.id)}')" title="Delete">🗑 Delete</button>
+        <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(String(w.id))}')" title="Delete">🗑 Delete</button>
       </div>
     </div>`;
 }
@@ -904,10 +956,6 @@ function fmtDate(iso) {
   catch { return ""; }
 }
 
-// ═══════════════════════════════════════════════════════════
-//  RENDER
-// ═══════════════════════════════════════════════════════════
-
 function render() {
   const filtered = getFilteredWords();
   const q        = state.search.trim().toLowerCase();
@@ -916,6 +964,7 @@ function render() {
   else renderCards(filtered, q);
   restoreExpandedCells();
   detectOverflow();
+  updateSyncButton();
 }
 
 function renderTable(words, q) {
@@ -950,10 +999,6 @@ function renderCards(words, q) {
   grid.innerHTML = words.map(w => buildCardHtml(w, q)).join("");
 }
 
-// ═══════════════════════════════════════════════════════════
-//  VIEW TOGGLE
-// ═══════════════════════════════════════════════════════════
-
 function setView(view) {
   state.view = view;
   const tableWrapper = document.getElementById("tableViewWrapper");
@@ -964,10 +1009,6 @@ function setView(view) {
   btns.forEach(b => b.classList.toggle("active", b.dataset.view === view));
   render();
 }
-
-// ═══════════════════════════════════════════════════════════
-//  CSV EXPORT
-// ═══════════════════════════════════════════════════════════
 
 function exportCSV() {
   if (!state.words.length) { toast("Nothing to export.", "warning"); return; }
@@ -993,10 +1034,6 @@ function csvEsc(val) {
   return /[",\n]/.test(s) ? `"${s}"` : s;
 }
 
-// ═══════════════════════════════════════════════════════════
-//  CSV IMPORT  — [UPDATED] local-first
-// ═══════════════════════════════════════════════════════════
-
 function importCSV(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -1009,19 +1046,34 @@ function importCSV(file) {
     if (!rows.length) { toast("No valid rows found.", "warning"); return; }
 
     toast(`Importing ${rows.length} rows…`, "info");
-    let ok = 0, fail = 0;
+    let ok = 0, fail = 0, skipped = 0;
 
     for (const row of rows) {
       const [word, def, ex = ""] = row;
-      // [NEW] Save locally first always
-      const normalized = normalizeWord(word.trim());
+      const wordTrimmed = word.trim();
+      const defTrimmed  = def.trim();
+      const exTrimmed   = ex.trim();
+      const normalized  = normalizeWord(wordTrimmed);
+
       const existing = state.words.find(w => normalizeWord(w.displayWord) === normalized);
+
       if (existing) {
-        addLocalDefinition(existing, def.trim(), ex.trim());
-        const sw = state.words.find(w => w.id === existing.id);
-        if (sw) sw.entries.push({ id: existing.id + "_e" + Date.now(), def: def.trim(), ex: ex.trim() });
+        if (hasDuplicateDef(existing.entries, defTrimmed)) {
+          skipped++;
+          continue;
+        }
+        const newEntryId = existing.id + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
+        const newEntry   = { id: newEntryId, def: defTrimmed, ex: exTrimmed };
+        existing.entries = [...existing.entries, newEntry];
+        const localWord  = state.localWords.find(w => String(w.id) === String(existing.id));
+        if (localWord) {
+          localWord.entries = [...localWord.entries, newEntry];
+          localWord._local  = true;
+        } else {
+          mergeIntoLocalWords({ ...existing, _local: true });
+        }
       } else {
-        const localWord = buildLocalWord(word.trim(), def.trim(), ex.trim());
+        const localWord = buildLocalWord(wordTrimmed, defTrimmed, exTrimmed);
         mergeIntoLocalWords(localWord);
         mergeResultIntoState(localWord);
       }
@@ -1029,9 +1081,9 @@ function importCSV(file) {
 
       if (!state.isOfflineMode) {
         try {
-          const result = await api("ADD", { displayWord: word.trim(), def: def.trim(), ex: ex.trim() });
+          const result = await api("ADD", { displayWord: wordTrimmed, def: defTrimmed, ex: exTrimmed });
           mergeResultIntoState(result);
-          const idx = state.localWords.findIndex(w => normalizeWord(w.displayWord) === normalizeWord(word.trim()));
+          const idx = state.localWords.findIndex(w => normalizeWord(w.displayWord) === normalizeWord(wordTrimmed));
           if (idx >= 0) state.localWords[idx] = { ...result, _local: false };
           saveLocalWords();
           ok++;
@@ -1045,7 +1097,8 @@ function importCSV(file) {
 
     render();
     updateStats();
-    toast(`Import done: ${ok} saved${fail ? ", " + fail + " failed." : "."}`, ok ? "success" : "warning");
+    const skipMsg = skipped > 0 ? `, ${skipped} duplicate(s) skipped` : "";
+    toast(`Import done: ${ok} saved${fail ? ", " + fail + " failed" : ""}${skipMsg}.`, ok ? "success" : "warning");
   };
   reader.readAsText(file);
 }
@@ -1066,10 +1119,6 @@ function parseCSVRow(line) {
   return result;
 }
 
-// ═══════════════════════════════════════════════════════════
-//  HTML ESCAPING
-// ═══════════════════════════════════════════════════════════
-
 function escHtml(str) {
   return String(str)
     .replace(/&/g, "&amp;")
@@ -1083,10 +1132,6 @@ function escAttr(str) {
   return String(str).replace(/'/g, "\\'").replace(/"/g, "&quot;");
 }
 
-// ═══════════════════════════════════════════════════════════
-//  EXPOSE GLOBALS  (for onclick= attributes)
-// ═══════════════════════════════════════════════════════════
-
 window.cancelEdit         = cancelEdit;
 window.startEdit          = startEdit;
 window.openEditModal      = openEditModal;
@@ -1094,10 +1139,7 @@ window.deleteWord         = deleteWord;
 window.speak              = speak;
 window.toggleReadMore     = toggleReadMore;
 window.toggleShowMoreDefs = toggleShowMoreDefs;
-
-// ═══════════════════════════════════════════════════════════
-//  EVENT WIRING
-// ═══════════════════════════════════════════════════════════
+window.manualSync         = manualSync;
 
 document.getElementById("addBtn").addEventListener("click", addWord);
 document.getElementById("generatePromptBtn").addEventListener("click", generatePrompt);
@@ -1134,11 +1176,10 @@ document.getElementById("exportBtn").addEventListener("click", exportCSV);
 document.getElementById("importBtn").addEventListener("click", () => { document.getElementById("csvFileInput").click(); });
 document.getElementById("csvFileInput").addEventListener("change", function() { importCSV(this.files[0]); this.value = ""; });
 
-window.addEventListener("resize", () => { detectOverflow(); });
+const syncBtnEl = document.getElementById("syncBtn");
+if (syncBtnEl) syncBtnEl.addEventListener("click", manualSync);
 
-// ═══════════════════════════════════════════════════════════
-//  [UPDATED] SERVICE WORKER — skipped on file://
-// ═══════════════════════════════════════════════════════════
+window.addEventListener("resize", () => { detectOverflow(); });
 
 if ("serviceWorker" in navigator && (location.protocol === "http:" || location.protocol === "https:")) {
   navigator.serviceWorker.register("./service-worker.js")
@@ -1148,11 +1189,9 @@ if ("serviceWorker" in navigator && (location.protocol === "http:" || location.p
   dbg("Service worker skipped (file:// or unsupported)");
 }
 
-// ═══════════════════════════════════════════════════════════
-//  INIT
-// ═══════════════════════════════════════════════════════════
-
 (async () => {
+  setView(isMobile() ? "cards" : "table");
+  showLoadingState();
   await updateOnlineStatus();
   await fetchWords();
 })();

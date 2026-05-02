@@ -11,12 +11,7 @@
   <link rel="manifest" href="./manifest.json">
   <link rel="stylesheet" href="./style.css">
 
-  <!-- ⚠️ CONFIGURE YOUR API URL HERE before deploying -->
   <script>
-    // Replace with your Google Apps Script Web App URL:
-    // 1. In Apps Script: Deploy → New deployment → Web app
-    // 2. Set "Execute as" = Me, "Who has access" = Anyone
-    // 3. Copy the URL and paste below
     window.APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxSyq5X3mxYiJtx_JLT07OvqAJlBj_otNPATbszYIBc53BePBrnwMbjeO5n-FSEPIN4/exec";
   </script>
 </head>
@@ -32,6 +27,7 @@
       </div>
       <div class="header-actions">
         <span id="queueBadge" class="queue-badge"></span>
+        <button id="syncBtn" title="Sync unsynced words to server">⟳ Sync</button>
         <div id="statusBadge" class="status-badge online">
           <span class="dot"></span>
           <span class="label">Online</span>
@@ -78,7 +74,6 @@
           >
         </div>
       </div>
-      <!-- CHANGED: added generatePromptBtn next to Add Word -->
       <div class="input-actions">
         <button id="addBtn" class="btn btn-primary">Add Word</button>
         <button id="generatePromptBtn" class="btn btn-ghost" title="Copy a ChatGPT prompt for this word">✨ Generate Prompt</button>
@@ -99,8 +94,8 @@
       </select>
 
       <div class="view-toggle">
-        <button class="vbtn active" data-view="table" title="Table view">⊞ Table</button>
-        <button class="vbtn" data-view="cards" title="Card view">▦ Cards</button>
+        <button class="vbtn" data-view="table" title="Table view">⊞ Table</button>
+        <button class="vbtn active" data-view="cards" title="Card view">▦ Cards</button>
       </div>
 
       <div class="csv-actions">
@@ -120,7 +115,7 @@
     </div>
 
     <!-- TABLE VIEW -->
-    <div id="tableViewWrapper" class="table-view-wrapper">
+    <div id="tableViewWrapper" class="table-view-wrapper hidden">
       <div class="table-wrap">
         <table class="vocab-table">
           <thead>
@@ -138,7 +133,7 @@
     </div>
 
     <!-- CARDS VIEW -->
-    <div id="cardsViewWrapper" class="cards-view-wrapper hidden">
+    <div id="cardsViewWrapper" class="cards-view-wrapper">
       <div id="cardsGrid" class="cards-grid">
         <div class="loading-state"><span class="spinner"></span> Loading…</div>
       </div>
