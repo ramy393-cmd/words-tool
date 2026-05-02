@@ -976,3 +976,16 @@ mark {
   .vocab-table tbody tr .actions-cell { vertical-align: middle; }
   .actions-cell .btn-icon { padding: 0 6px; font-size: 0.7rem; }
 }
+/* FIX card text overflow */
+.card-entry-content,
+.card-entry-content .entry-def,
+.card-entry-content .entry-ex {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* ensure card never overflows */
+.vocab-card {
+  overflow: hidden;
+}
