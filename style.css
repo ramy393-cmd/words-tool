@@ -979,3 +979,44 @@ mark {
     width: 100%;
   }
 }
+/* =========================
+   FIX: show Table button on mobile
+   ========================= */
+
+.view-toggle {
+  display: flex !important;
+  gap: 8px;
+}
+
+/* خلي الزرارين يظهروا دايمًا */
+.view-toggle .vbtn {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+/* موبايل */
+@media (max-width: 700px) {
+
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* مهم جدًا */
+  .view-toggle {
+    width: 100%;
+    display: flex !important;
+  }
+
+  /* يخلي Table + Cards جنب بعض */
+  .view-toggle .vbtn {
+    flex: 1;
+  }
+
+  /* منع أي overflow يخفي الزر */
+  .toolbar,
+  .view-toggle {
+    overflow: visible !important;
+  }
+}
