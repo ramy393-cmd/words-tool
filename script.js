@@ -224,36 +224,44 @@ function showEmptyFallback(msg) {
 }
 
 async function fetchWords() {
+  // STEP 1: Always render local data immediately if available
   if (state.localWords.length > 0) {
+    dbg("Offline-first: rendering from localWords immediately");
     state.words = buildDeduplicatedWords(state.localWords);
     render();
     updateStats();
   } else if (state.isOfflineMode) {
     showEmptyFallback();
-  }
-
-  if (state.isOfflineMode) {
-    dbg("Offline mode: rendering from localWords");
-    if (state.localWords.length === 0) showEmptyFallback();
     return;
   }
 
+  // STEP 2: If offline, stop here
+  if (state.isOfflineMode) {
+    dbg("Offline mode: skipping API fetch");
+    if (state.localWords.length === 0) {
+      showEmptyFallback();
+    }
+    return;
+  }
+
+  // STEP 3: Background fetch from server
   try {
     const data = await api("GET");
-    state.words = buildDeduplicatedWords(data);
-    state.words.forEach(w => mergeIntoLocalWords({ ...w, _local: false }));
+    const serverWords = buildDeduplicatedWords(data);
+
+    serverWords.forEach(w => mergeIntoLocalWords({ ...w, _local: false }));
     saveLocalWords();
+
+    state.words = buildDeduplicatedWords(state.localWords);
     render();
     updateStats();
   } catch (err) {
     console.error("Fetch failed:", err);
-    dbg("Fetch failed, falling back to localWords");
-    if (state.localWords.length === 0) {
+    dbg("Background fetch failed, keeping local data visible");
+    if (state.localWords.length === 0 && state.words.length === 0) {
       showEmptyFallback("Failed to load. Check your connection.");
       toast("Failed to load words. Check your connection.", "error");
     }
-    state.isOfflineMode = true;
-    updateSyncButton();
   }
 }
 
@@ -1197,7 +1205,8 @@ if ("serviceWorker" in navigator && (location.protocol === "http:" || location.p
   dbg("Service worker skipped (file:// or unsupported)");
 }
 
-setView(isMobile() ? "cards" : "table");
-showLoadingState();
-fetchWords();
-updateOnlineStatus();
+(async () => {
+  setView(isMobile() ? "cards" : "table");
+  fetchWords();
+  updateOnlineStatus();
+})();
