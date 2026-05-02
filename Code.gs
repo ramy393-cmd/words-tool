@@ -1,8 +1,3 @@
-// ═══════════════════════════════════════════════════════════
-//  MBA Vocabulary — Code.gs  (v2.1)
-//  Columns: id | word | displayWord | entries | createdAt | updatedAt
-// ═══════════════════════════════════════════════════════════
-
 function doGet(e) {
   const action = (e.parameter.action || "GET").toUpperCase();
 
@@ -13,59 +8,54 @@ function doGet(e) {
     return jsonResponse({ ok: false, error: "Invalid JSON payload" });
   }
 
-  let sheet;
-  try {
-    sheet = getSheet();
-  } catch (err) {
-    return jsonResponse({ ok: false, error: "Could not access sheet: " + err.message });
-  }
+  const sheet = getSheet();
 
   try {
     let result;
 
-    // ── GET ──────────────────────────────────────────────────
     if (action === "GET") {
       result = getAllWords(sheet);
     }
 
-    // ── ADD ──────────────────────────────────────────────────
-    // FORCE-MERGE: one word = one row, ALWAYS.
-    // If the normalised displayWord already exists → append entry.
-    // If the exact same definition already exists → skip silently.
-    // Never creates a second row for the same word.
     else if (action === "ADD") {
       const displayWord = (payload.displayWord || "").trim();
-      const def         = (payload.def || "").trim();
-      const ex          = (payload.ex || "").trim();
+      const def = (payload.def || "").trim();
+      const ex = (payload.ex || "").trim();
 
       if (!displayWord || !def) {
         throw new Error("Missing word or definition");
       }
 
-      const normalized = normalize(displayWord);
-      const data       = getAllWords(sheet);
-
-      // Search by normalised word — catches all casing/spacing variants
-      const existing = data.find(w => w.word === normalized);
+      const word = normalize(displayWord);
+      const data = getAllWords(sheet);
+      const existing = data.find(w => normalize(w.word) === word);
 
       if (existing) {
-        // Deduplicate: only append if this exact definition doesn't exist yet
-        const isDup = existing.entries.some(en => normalize(en.def) === normalize(def));
-        if (!isDup) {
-          existing.entries.push({ id: generateId(), def, ex });
-          updateEntriesAndTimestamp(sheet, existing);
+        const exists = existing.entries.some(e => normalize(e.def) === normalize(def));
+
+        if (!exists) {
+          existing.entries.push({
+            id: Date.now().toString(),
+            def,
+            ex
+          });
+
+          updateRow(sheet, existing);
         }
+
         result = existing;
+
       } else {
-        // Genuinely new word — create a new row
-        const now     = new Date().toISOString();
         const newWord = {
-          id:          generateId(),
-          word:        normalized,
+          id: Date.now().toString(),
+          word,
           displayWord,
-          entries:     [{ id: generateId(), def, ex }],
-          createdAt:   now,
-          updatedAt:   now
+          entries: [{
+            id: Date.now().toString(),
+            def,
+            ex
+          }],
+          createdAt: new Date().toISOString()
         };
 
         sheet.appendRow([
@@ -73,52 +63,11 @@ function doGet(e) {
           newWord.word,
           newWord.displayWord,
           JSON.stringify(newWord.entries),
-          newWord.createdAt,
-          newWord.updatedAt
+          newWord.createdAt
         ]);
 
         result = newWord;
       }
-    }
-
-    // ── UPDATE ───────────────────────────────────────────────
-    else if (action === "UPDATE") {
-      const id      = String(payload.id || "").trim();
-      const entryId = String(payload.entryId || "").trim();
-      const def     = (payload.def || "").trim();
-      const ex      = (payload.ex  || "").trim();
-
-      if (!id || !entryId || !def) {
-        throw new Error("Missing id, entryId, or definition for UPDATE");
-      }
-
-      const data = getAllWords(sheet);
-      const word = data.find(w => String(w.id) === id);
-      if (!word) throw new Error("Word not found: " + id);
-
-      const entry = word.entries.find(en => String(en.id) === entryId);
-      if (!entry) throw new Error("Entry not found: " + entryId);
-
-      entry.def = def;
-      entry.ex  = ex;
-
-      updateEntriesAndTimestamp(sheet, word);
-      result = word;
-    }
-
-    // ── DELETE ───────────────────────────────────────────────
-    else if (action === "DELETE") {
-      const id = String(payload.id || "").trim();
-      if (!id) throw new Error("Missing id for DELETE");
-
-      const deleted = deleteRow(sheet, id);
-      if (!deleted) throw new Error("Row not found for id: " + id);
-
-      result = { deleted: true, id };
-    }
-
-    else {
-      throw new Error("Unknown action: " + action);
     }
 
     return jsonResponse({ ok: true, data: result });
@@ -128,16 +77,15 @@ function doGet(e) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-//  SHEET HELPERS
-// ═══════════════════════════════════════════════════════════
+// ===== Helpers =====
 
 function getSheet() {
-  const sheet     = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
-  const firstCell = sheet.getRange(1, 1).getValue();
-  if (!firstCell || String(firstCell).trim() === "") {
-    sheet.appendRow(["id", "word", "displayWord", "entries", "createdAt", "updatedAt"]);
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(["id","word","displayWord","entries","createdAt"]);
   }
+
   return sheet;
 }
 
@@ -145,63 +93,39 @@ function getAllWords(sheet) {
   const rows = sheet.getDataRange().getValues();
   if (rows.length < 2) return [];
 
-  return rows.slice(1)
-    .filter(r => r[0] !== "" && r[0] !== null && r[0] !== undefined)
-    .map(r => {
-      let entries = [];
-      try {
-        const raw = String(r[3] || "").trim();
-        if (raw && raw.startsWith("[")) entries = JSON.parse(raw);
-      } catch (_) {
-        entries = [];
-      }
-
-      return {
-        id:          String(r[0]),
-        word:        String(r[1]),
-        displayWord: String(r[2]),
-        entries,
-        createdAt:   r[4] ? String(r[4]) : "",
-        updatedAt:   r[5] ? String(r[5]) : ""
-      };
-    });
+  return rows.slice(1).map(r => ({
+    id: String(r[0]),
+    word: r[1],
+    displayWord: r[2],
+    entries: safeParse(r[3]),
+    createdAt: r[4]
+  }));
 }
 
-function updateEntriesAndTimestamp(sheet, wordObj) {
+function updateRow(sheet, wordObj) {
   const rows = sheet.getDataRange().getValues();
+
   for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(wordObj.id)) {
-      const now = new Date().toISOString();
+    if (
+      String(rows[i][0]) === String(wordObj.id) ||
+      normalize(rows[i][1]) === normalize(wordObj.word)
+    ) {
       sheet.getRange(i + 1, 4).setValue(JSON.stringify(wordObj.entries));
-      sheet.getRange(i + 1, 6).setValue(now);
-      wordObj.updatedAt = now;
-      return true;
+      return;
     }
   }
-  return false;
-}
-
-function deleteRow(sheet, id) {
-  const rows = sheet.getDataRange().getValues();
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(id)) {
-      sheet.deleteRow(i + 1);
-      return true;
-    }
-  }
-  return false;
-}
-
-// ═══════════════════════════════════════════════════════════
-//  UTILITIES
-// ═══════════════════════════════════════════════════════════
-
-function generateId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
 function normalize(str) {
   return String(str).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function safeParse(val) {
+  try {
+    return JSON.parse(val || "[]");
+  } catch {
+    return [];
+  }
 }
 
 function jsonResponse(obj) {
