@@ -922,3 +922,60 @@ mark {
   .cards-view-wrapper.hidden,
   .table-view-wrapper.hidden { display: none; }
 }
+/* =========================
+   FINAL MOBILE FIX (SAFE)
+   ========================= */
+
+/* FIX cards cutting (mobile + desktop safe) */
+.card-entry-content,
+.card-entry-content .entry-def,
+.card-entry-content .entry-ex {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  max-width: 100%;
+}
+
+.vocab-card {
+  overflow: hidden;
+}
+
+.cards-grid {
+  overflow: hidden;
+}
+
+/* =========================
+   TOOLBAR FIX (SHOW TABLE BUTTON)
+   ========================= */
+
+@media (max-width: 700px) {
+
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .search-wrap {
+    width: 100%;
+  }
+
+  .view-toggle {
+    width: 100%;
+    display: flex;
+  }
+
+  .view-toggle .vbtn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .csv-actions {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  select.sort-select {
+    width: 100%;
+  }
+}
