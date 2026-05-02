@@ -2,7 +2,7 @@
   "name": "Vocabulary",
   "short_name": "VocabMBA",
   "description": "MBA & Business English vocabulary builder",
-  "start_url": "./index.html",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#0a0a0f",
   "theme_color": "#0a0a0f",
