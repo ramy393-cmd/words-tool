@@ -520,13 +520,16 @@ function openMergeModal(existingWord, displayWord, def, ex) {
 }
 
 async function confirmMerge() {
-  closeMergeModal();
   if (!_pendingMerge) return;
   const { existingWord, displayWord, def, ex } = _pendingMerge;
   _pendingMerge = null;
+  document.getElementById("mergeModal").classList.remove("open");
 
-  const currentWord = state.words.find(w => String(w.id) === String(existingWord.id));
-  const checkWord   = currentWord || existingWord;
+  const currentWord = state.words.find(
+    w => String(w.id) === String(existingWord.id) ||
+         normalizeWord(w.displayWord) === normalizeWord(existingWord.displayWord)
+  );
+  const checkWord = currentWord || existingWord;
   if (hasDuplicateDef(checkWord.entries, def)) {
     toast("This definition already exists for this word.", "warning");
     return;
@@ -536,21 +539,36 @@ async function confirmMerge() {
   addBtn.disabled    = true;
   addBtn.textContent = "Saving…";
 
-  const newEntryId = existingWord.id + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
+  const baseId     = (existingWord.id || "e") + "";
+  const newEntryId = baseId + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
   const newEntry   = { id: newEntryId, def, ex: ex || "" };
 
-  const stateWord = state.words.find(w => String(w.id) === String(existingWord.id));
+  const stateWord = state.words.find(
+    w => String(w.id) === String(existingWord.id) ||
+         normalizeWord(w.displayWord) === normalizeWord(existingWord.displayWord)
+  );
   if (stateWord) {
-    stateWord.entries = [...stateWord.entries, newEntry];
+    if (!hasDuplicateDef(stateWord.entries, def)) {
+      stateWord.entries = [...stateWord.entries, newEntry];
+    }
   }
 
-  const localWord = state.localWords.find(w => String(w.id) === String(existingWord.id));
+  const localWord = state.localWords.find(
+    w => String(w.id) === String(existingWord.id) ||
+         normalizeWord(w.displayWord) === normalizeWord(existingWord.displayWord)
+  );
   if (localWord) {
-    localWord.entries = [...localWord.entries, newEntry];
-    localWord._local  = true;
+    if (!hasDuplicateDef(localWord.entries, def)) {
+      localWord.entries = [...localWord.entries, newEntry];
+    }
+    localWord._local = true;
   } else {
-    const combined = stateWord || existingWord;
-    mergeIntoLocalWords({ ...combined, _local: true });
+    const combined = stateWord ? { ...stateWord } : { ...existingWord };
+    if (!hasDuplicateDef(combined.entries || [], def)) {
+      combined.entries = [...(combined.entries || []), newEntry];
+    }
+    combined._local = true;
+    mergeIntoLocalWords(combined);
   }
   saveLocalWords();
 
@@ -565,16 +583,11 @@ async function confirmMerge() {
   if (!state.isOfflineMode) {
     try {
       const result = await api("ADD", { displayWord, def, ex });
-      const byId   = state.words.findIndex(w => String(w.id) === String(result.id));
-      const byName = state.words.findIndex(w => normalizeWord(w.displayWord) === normalizeWord(result.displayWord));
-      if (byId >= 0) {
-        state.words[byId] = { ...result };
-      } else if (byName >= 0) {
-        state.words[byName] = { ...result };
-      } else {
-        state.words.unshift({ ...result });
-      }
-      const lidx = state.localWords.findIndex(w => normalizeWord(w.displayWord) === normalizeWord(displayWord));
+      mergeResultIntoState(result);
+      const lidx = state.localWords.findIndex(
+        w => String(w.id) === String(result.id) ||
+             normalizeWord(w.displayWord) === normalizeWord(displayWord)
+      );
       if (lidx >= 0) state.localWords[lidx] = { ...result, _local: false };
       saveLocalWords();
       render();
