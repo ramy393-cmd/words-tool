@@ -989,3 +989,21 @@ mark {
 .vocab-card {
   overflow: hidden;
 }
+
+/* ── Desktop card expand (word click only) ───────────────── */
+@media (min-width: 701px) {
+  .vocab-card .card-entries,
+  .vocab-card .card-actions {
+    display: none;
+  }
+  .vocab-card.expanded .card-entries,
+  .vocab-card.expanded .card-actions {
+    display: block;
+  }
+  .vocab-card.expanded .card-actions {
+    display: flex;
+  }
+  .vocab-card .card-word {
+    cursor: pointer;
+  }
+}

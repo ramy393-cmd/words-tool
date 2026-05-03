@@ -780,7 +780,7 @@ function speak(text) {
 }
 
 function getFilteredWords() {
-  let words = [...state.words];
+  let words = [...state.words].reverse();
   const q = state.search.trim().toLowerCase();
   if (q) {
     words = words.filter(w => {
@@ -983,6 +983,8 @@ function render() {
   updateSyncButton();
   // Re-attach mobile row expand listeners after every render
   if (isMobile()) attachMobileRowExpand();
+  // Desktop-only: attach card-word click to toggle expanded class
+  if (!isMobile()) attachDesktopCardExpand();
 }
 
 function renderTable(words, q) {
@@ -1055,7 +1057,24 @@ function attachMobileRowExpand() {
   });
 }
 
-function exportCSV() {
+/* ── Desktop card word click expand / collapse ───────────── */
+function attachDesktopCardExpand() {
+  const grid = document.getElementById("cardsGrid");
+  if (!grid) return;
+
+  grid.querySelectorAll(".vocab-card .card-word").forEach(wordEl => {
+    if (wordEl._desktopExpandBound) return;
+    wordEl._desktopExpandBound = true;
+
+    wordEl.addEventListener("click", function(e) {
+      const card = this.closest(".vocab-card");
+      if (!card) return;
+      card.classList.toggle("expanded");
+    });
+  });
+}
+
+
   if (!state.words.length) { toast("Nothing to export.", "warning"); return; }
   const rows = [["word", "definition", "example"]];
   state.words.forEach(w => {
