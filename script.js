@@ -780,7 +780,7 @@ function speak(text) {
 }
 
 function getFilteredWords() {
-  let words = [...state.words].reverse();
+  let words = [...state.words];
   const q = state.search.trim().toLowerCase();
   if (q) {
     words = words.filter(w => {
@@ -792,9 +792,11 @@ function getFilteredWords() {
     });
   }
   if (state.sort === "oldest") {
-    words = words.slice().reverse();
+    words = words.slice().sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
   } else if (state.sort === "az") {
     words = words.slice().sort((a, b) => a.displayWord.localeCompare(b.displayWord));
+  } else {
+    words = words.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
   }
   return words;
 }
@@ -1075,7 +1077,6 @@ function attachDesktopCardExpand() {
 }
 
 
-function exportCSV() {
   if (!state.words.length) { toast("Nothing to export.", "warning"); return; }
   const rows = [["word", "definition", "example"]];
   state.words.forEach(w => {
