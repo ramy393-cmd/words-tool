@@ -1028,3 +1028,13 @@ mark {
   }
 
 }
+@media (max-width: 700px) {
+  .vocab-table {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .table-view-wrapper {
+    overflow-x: hidden;
+  }
+}
