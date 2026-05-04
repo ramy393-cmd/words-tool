@@ -1007,34 +1007,3 @@ mark {
     cursor: pointer;
   }
 }
-/* ===== MOBILE TABLE FIX (SAFE) ===== */
-@media (max-width: 700px) {
-
-  /* خلي النص يلف بدل ما يتمد */
-  .clamp-text {
-    white-space: normal !important;
-    word-break: break-word;
-    overflow-wrap: anywhere;
-  }
-
-  /* خلي الجدول مرن */
-  .vocab-table {
-    table-layout: auto !important;
-  }
-
-  /* امنع خروج المحتوى */
-  .def-cell {
-    overflow: hidden;
-  }
-
-}
-@media (max-width: 700px) {
-  .vocab-table {
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .table-view-wrapper {
-    overflow-x: hidden;
-  }
-}
