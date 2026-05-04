@@ -1075,6 +1075,7 @@ function attachDesktopCardExpand() {
 }
 
 
+function exportCSV() {
   if (!state.words.length) { toast("Nothing to export.", "warning"); return; }
   const rows = [["word", "definition", "example"]];
   state.words.forEach(w => {
