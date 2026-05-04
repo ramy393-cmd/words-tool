@@ -40,6 +40,27 @@ if (ENV.isFile) dbg("Running in offline mode (file://)");
 function normalizeDef(def) {
   return String(def || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
+/* ===== MOBILE TABLE FIX (SAFE) ===== */
+@media (max-width: 700px) {
+
+  /* خلي النص يلف بدل ما يتمد */
+  .clamp-text {
+    white-space: normal !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  /* خلي الجدول مرن */
+  .vocab-table {
+    table-layout: auto !important;
+  }
+
+  /* امنع خروج المحتوى */
+  .def-cell {
+    overflow: hidden;
+  }
+
+}
 
 function hasDuplicateDef(entries, def) {
   const nd = normalizeDef(def);
