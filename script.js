@@ -172,7 +172,7 @@ async function updateOnlineStatus() {
   if (API) {
     try {
       const params = new URLSearchParams({ action: "PING", t: Date.now() });
-      const res = await fetch(API + "?" + params, { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(API + "?" + params, { signal: makeAbortSignal(5000) });
       if (!res.ok) throw new Error("HTTP " + res.status);
       setOfflineMode(false);
       syncLocalToServer();
@@ -189,6 +189,11 @@ async function updateOnlineStatus() {
 window.addEventListener("online",  () => { dbg("Browser online event"); updateOnlineStatus(); });
 window.addEventListener("offline", () => { dbg("Browser offline event"); setOfflineMode(true); });
 
+function makeAbortSignal(ms) {
+  try { return AbortSignal.timeout(ms); }
+  catch (_) { const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), ms); return ctrl.signal; }
+}
+
 async function api(action, payload = {}) {
   if (!API) throw new Error("No API configured");
   const params = new URLSearchParams({
@@ -197,7 +202,7 @@ async function api(action, payload = {}) {
     t:       Date.now(),
   });
   const url = API + "?" + params.toString();
-  const res  = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  const res  = await fetch(url, { signal: makeAbortSignal(10000) });
   if (!res.ok) throw new Error("HTTP " + res.status);
   const json = await res.json();
   if (!json.ok) throw new Error(json.error || "API error");
@@ -1077,6 +1082,7 @@ function attachDesktopCardExpand() {
 }
 
 
+function exportCSV() {
   if (!state.words.length) { toast("Nothing to export.", "warning"); return; }
   const rows = [["word", "definition", "example"]];
   state.words.forEach(w => {
@@ -1257,5 +1263,4 @@ if ("serviceWorker" in navigator && (location.protocol === "http:" || location.p
 
 setView("table");
 showLoadingState();
-fetchWords();
-updateOnlineStatus();
+updateOnlineStatus().then(() => fetchWords());
