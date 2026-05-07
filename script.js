@@ -985,6 +985,9 @@ function buildDefCellHtml(w, q) {
         <button class="btn btn-icon edit entry-edit-btn"
           onclick="openEditModal('${escAttr(String(w.id))}','${escAttr(String(e.id))}')"
           title="Edit this definition">✏️</button>
+        <button class="btn btn-icon delete entry-edit-btn"
+          onclick="event.stopPropagation();deleteEntry('${escAttr(String(w.id))}','${escAttr(String(e.id))}')"
+          title="Delete this definition">🗑</button>
       </div>
       ${exHtml}
     </div>`;
@@ -1037,6 +1040,7 @@ function buildCardHtml(w, q) {
               </div>` : ""}
           </div>
           <button class="btn btn-icon edit card-entry-edit-btn" onclick="openEditModal('${escAttr(String(w.id))}','${escAttr(String(e.id))}')" title="Edit this definition">✏️</button>
+          <button class="btn btn-icon delete card-entry-edit-btn" onclick="event.stopPropagation();deleteEntry('${escAttr(String(w.id))}','${escAttr(String(e.id))}')" title="Delete this definition">🗑</button>
         </div>
       </div>`;
   }).join('<div class="entry-divider"></div>');
