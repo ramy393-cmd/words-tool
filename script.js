@@ -75,13 +75,18 @@ function mergeIntoLocalWords(word) {
 function buildLocalWord(displayWord, def, ex) {
   const id      = "local_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
   const entryId = id + "_e0";
+  const entries = (def && def.trim())
+    ? [{ id: entryId, def: def.trim(), ex: (ex || "").trim() }]
+    : [];
+
   return {
     id,
     displayWord,
     word: normalizeWord(displayWord),
-    entries: [{ id: entryId, def, ex: ex || "" }],
+    entries,
     createdAt: new Date().toISOString(),
     _local: true,
+    _incomplete: entries.length === 0,
   };
 }
 
@@ -324,10 +329,39 @@ async function syncLocalToServer() {
   let failedCount = 0;
 
   for (const localWord of localDirty) {
+    const entries = Array.isArray(localWord.entries) ? localWord.entries : [];
+
     let allEntriesSynced = true;
     let serverResult = null;
 
-    for (const entry of localWord.entries) {
+    if (entries.length === 0) {
+      try {
+        const result = await api("ADD", {
+          displayWord: localWord.displayWord,
+          def: "",
+          ex: "",
+        });
+
+        serverResult = result;
+        mergeResultIntoState(result);
+        syncedCount++;
+      } catch (err) {
+        dbg("Sync failed for incomplete word:", localWord.displayWord, err.message);
+        allEntriesSynced = false;
+        failedCount++;
+      }
+
+      if (allEntriesSynced && serverResult) {
+        const idx = state.localWords.findIndex(w => w.id === localWord.id);
+        if (idx >= 0) {
+          state.localWords[idx] = { ...serverResult, _local: false };
+        }
+      }
+
+      continue;
+    }
+
+    for (const entry of entries) {
       try {
         const result = await api("ADD", {
           displayWord: localWord.displayWord,
@@ -441,7 +475,7 @@ async function addWord() {
     }
   }
 
-  if (!word || !def) { toast("Please fill in Word and Definition.", "warning"); return; }
+  if (!word) { toast("Please fill in Word.", "warning"); return; }
   if (state.editMode) { await updateWord(word, def, ex); return; }
 
   const normalized = normalizeWord(word);
@@ -790,7 +824,8 @@ function getFilteredWords() {
   if (q) {
     words = words.filter(w => {
       if (w.displayWord.toLowerCase().includes(q)) return true;
-      return w.entries.some(e =>
+      const entries = Array.isArray(w.entries) ? w.entries : [];
+      return entries.some(e =>
         (e.def || "").toLowerCase().includes(q) ||
         (e.ex  || "").toLowerCase().includes(q)
       );
@@ -815,12 +850,20 @@ function highlight(text, query) {
 }
 
 function updateStats() {
-  const filtered  = getFilteredWords();
-  const totalDefs = state.words.reduce((s, w) => s + w.entries.length, 0);
+  const filtered = getFilteredWords();
+
+  const totalDefs = state.words.reduce((sum, w) => {
+    const entries = Array.isArray(w.entries) ? w.entries : [];
+    return sum + entries.filter(e =>
+      e && typeof e.def === "string" && e.def.trim()
+    ).length;
+  }, 0);
+
   const el = (id) => document.getElementById(id);
-  if (el("statWords"))  el("statWords").textContent  = state.words.length;
-  if (el("statDefs"))   el("statDefs").textContent   = totalDefs;
-  if (el("statShown"))  el("statShown").textContent  = filtered.length;
+
+  if (el("statWords")) el("statWords").textContent = state.words.length;
+  if (el("statDefs")) el("statDefs").textContent = totalDefs;
+  if (el("statShown")) el("statShown").textContent = filtered.length;
 }
 
 function toggleReadMore(btn) {
@@ -1085,8 +1128,17 @@ function attachDesktopCardExpand() {
 function exportCSV() {
   if (!state.words.length) { toast("Nothing to export.", "warning"); return; }
   const rows = [["word", "definition", "example"]];
+
   state.words.forEach(w => {
-    w.entries.forEach(e => rows.push([csvEsc(w.displayWord), csvEsc(e.def), csvEsc(e.ex || "")]));
+    const entries = Array.isArray(w.entries) ? w.entries : [];
+
+    if (entries.length === 0) {
+      rows.push([csvEsc(w.displayWord), "", ""]);
+    } else {
+      entries.forEach(e =>
+        rows.push([csvEsc(w.displayWord), csvEsc(e.def), csvEsc(e.ex || "")])
+      );
+    }
   });
   const csv  = rows.map(r => r.join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
@@ -1114,7 +1166,7 @@ function importCSV(file) {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (!lines.length) { toast("Empty file.", "warning"); return; }
     const start = lines[0].toLowerCase().includes("word") ? 1 : 0;
-    const rows  = lines.slice(start).map(parseCSVRow).filter(r => r.length >= 2 && r[0] && r[1]);
+    const rows = lines.slice(start).map(parseCSVRow).filter(r => r.length >= 1 && r[0]);
     if (!rows.length) { toast("No valid rows found.", "warning"); return; }
 
     toast(`Importing ${rows.length} rows…`, "info");
@@ -1208,6 +1260,7 @@ window.cancelEdit         = cancelEdit;
 window.startEdit          = startEdit;
 window.openEditModal      = openEditModal;
 window.deleteWord         = deleteWord;
+window.deleteEntry        = deleteEntry;
 window.speak              = speak;
 window.toggleReadMore     = toggleReadMore;
 window.toggleShowMoreDefs = toggleShowMoreDefs;
