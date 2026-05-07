@@ -22,8 +22,8 @@ function doGet(e) {
       const def = (payload.def || "").trim();
       const ex = (payload.ex || "").trim();
 
-      if (!displayWord || !def) {
-        throw new Error("Missing word or definition");
+      if (!displayWord) {
+        throw new Error("Missing word");
       }
 
       const word = normalize(displayWord);
@@ -31,9 +31,11 @@ function doGet(e) {
       const existing = data.find(w => w.word === word);
 
       if (existing) {
-        const exists = existing.entries.some(e => normalize(e.def) === normalize(def));
+        const exists = def
+          ? existing.entries.some(e => normalize(e.def) === normalize(def))
+          : false;
 
-        if (!exists) {
+        if (def && !exists) {
           existing.entries.push({
             id: Date.now().toString() + "_" + Math.random().toString(36).slice(2),
             def,
@@ -50,11 +52,11 @@ function doGet(e) {
           id: Date.now().toString(),
           word,
           displayWord,
-          entries: [{
+          entries: def ? [{
             id: Date.now().toString() + "_" + Math.random().toString(36).slice(2),
             def,
             ex
-          }],
+          }] : [],
           createdAt: new Date().toISOString()
         };
 
@@ -68,6 +70,31 @@ function doGet(e) {
 
         result = newWord;
       }
+    }
+
+
+    else if (action === "DELETE_ENTRY") {
+      const wordId = String(payload.wordId || "");
+      const entryId = String(payload.entryId || "");
+
+      if (!wordId || !entryId) {
+        throw new Error("Missing wordId or entryId");
+      }
+
+      const data = getAllWords(sheet);
+      const existing = data.find(w => String(w.id) === wordId);
+
+      if (!existing) {
+        throw new Error("Word not found");
+      }
+
+      existing.entries = (existing.entries || []).filter(
+        e => String(e.id) !== entryId
+      );
+
+      updateRow(sheet, existing);
+
+      result = existing;
     }
 
     else if (action === "DELETE") {

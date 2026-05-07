@@ -806,6 +806,44 @@ async function deleteWord(id) {
   }
 }
 
+
+async function deleteEntry(wordId, entryId) {
+  if (!confirm("Delete this definition?")) return;
+
+  const word = state.words.find(w => String(w.id) === String(wordId));
+  if (!word) return;
+
+  const entries = Array.isArray(word.entries) ? word.entries : [];
+  word.entries = entries.filter(e => String(e.id) !== String(entryId));
+
+  if (word.entries.length === 0) {
+    word._incomplete = true;
+  }
+
+  const localWord = state.localWords.find(w => String(w.id) === String(wordId));
+  if (localWord) {
+    localWord.entries = [...word.entries];
+    localWord._incomplete = word.entries.length === 0;
+  }
+
+  saveLocalWords();
+  render();
+  updateStats();
+  toast("Definition deleted.", "info");
+
+  if (!state.isOfflineMode) {
+    try {
+      await api("DELETE_ENTRY", {
+        wordId: String(wordId),
+        entryId: String(entryId)
+      });
+    } catch (err) {
+      console.error("DELETE_ENTRY failed:", err);
+    }
+  }
+}
+
+
 async function syncQueue() {
   await syncLocalToServer();
 }
@@ -968,6 +1006,7 @@ function buildTableRow(w, q) {
       <td class="word-cell">
         <span class="word-text word-truncate" title="${escAttr(w.displayWord)}">${highlight(w.displayWord, q)}</span>
         ${w.entries.length > 1 ? `<span class="entry-count-badge">${w.entries.length}</span>` : ""}
+        ${(!Array.isArray(w.entries) || w.entries.length === 0) ? `<span class="incomplete-badge" title="No definition added yet">Incomplete</span>` : ""}
         ${w._local ? `<span class="local-badge" title="Not yet synced">⏳</span>` : ""}
       </td>
       <td class="def-cell">${buildDefCellHtml(w, q)}</td>
@@ -1007,6 +1046,7 @@ function buildCardHtml(w, q) {
       <div class="card-header">
         <div class="card-word word-truncate" title="${escAttr(w.displayWord)}">${highlight(w.displayWord, q)}</div>
         ${w._local ? `<span class="local-badge" title="Not yet synced">⏳</span>` : ""}
+        ${(!Array.isArray(w.entries) || w.entries.length === 0) ? `<span class="incomplete-badge" title="No definition added yet">Incomplete</span>` : ""}
         ${w.createdAt ? `<div class="card-date">${fmtDate(w.createdAt)}</div>` : ""}
       </div>
       <div class="card-entries">${entriesHtml}</div>
