@@ -16,6 +16,67 @@
   </script>
 
   <style>
+    .actions-th-empty {
+      padding: 0;
+      width: 0;
+      min-width: 0;
+      border: none;
+      display: none;
+    }
+
+    /* ── Word-cell inline actions (table view) ─────────────────── */
+    .word-cell-top {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .word-cell-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 4px;
+    }
+    /* Hide empty actions column but keep it in DOM for structure */
+    .actions-cell:empty {
+      padding: 0;
+      width: 0;
+      min-width: 0;
+      border: none;
+    }
+    th:last-child:has(+ *:empty) { display: none; }
+
+    /* ── Card header: word + word-actions side by side ──────────── */
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .card-header-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .card-word-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    /* ── Mobile: stack word actions below word ──────────────────── */
+    @media (max-width: 700px) {
+      .word-cell-top {
+        flex-wrap: wrap;
+      }
+      .word-cell-actions {
+        flex-wrap: wrap;
+      }
+    }
+
     /* ── Part 1+2: Icon-only action buttons — unified size ─────── */
     .btn.btn-icon {
       min-width: 32px;
@@ -240,7 +301,7 @@
             <tr>
               <th>Word</th>
               <th>Definition &amp; Example</th>
-              <th>Actions</th>
+              <th class="actions-th-empty"></th>
             </tr>
           </thead>
           <tbody id="tableBody">

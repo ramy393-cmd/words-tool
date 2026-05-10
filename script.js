@@ -1304,17 +1304,20 @@ function buildTableRow(w, q) {
   return `
     <tr data-word-id="${escAttr(String(w.id))}">
       <td class="word-cell">
-        <span class="word-text word-truncate" title="${escAttr(w.displayWord)}">${highlight(w.displayWord, q)}</span>
-        ${w.entries && w.entries.length > 1 ? `<span class="entry-count-badge">${w.entries.length}</span>` : ""}
-        ${isIncomplete ? `<span class="incomplete-badge" title="No definition added yet">Incomplete</span>` : ""}
-        ${w._local ? `<span class="local-badge" title="Not yet synced">⏳</span>` : ""}
+        <div class="word-cell-top">
+          <span class="word-text word-truncate" title="${escAttr(w.displayWord)}">${highlight(w.displayWord, q)}</span>
+          ${w.entries && w.entries.length > 1 ? `<span class="entry-count-badge">${w.entries.length}</span>` : ""}
+          ${isIncomplete ? `<span class="incomplete-badge" title="No definition added yet">Incomplete</span>` : ""}
+          ${w._local ? `<span class="local-badge" title="Not yet synced">⏳</span>` : ""}
+        </div>
+        <div class="word-cell-actions">
+          <button class="btn btn-icon rename" onclick="openRenameWordModal('${escAttr(String(w.id))}')" title="Rename word">✏️</button>
+          <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Speak word">🔊</button>
+          <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(String(w.id))}')" title="Delete word">🗑</button>
+        </div>
       </td>
       <td class="def-cell">${buildDefCellHtml(w, q)}</td>
-      <td class="actions-cell">
-        <button class="btn btn-icon rename" onclick="openRenameWordModal('${escAttr(String(w.id))}')" title="Rename word">✏️</button>
-        <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Speak word">🔊</button>
-        <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(String(w.id))}')" title="Delete word">🗑</button>
-      </td>
+      <td class="actions-cell"></td>
     </tr>`;
 }
 
@@ -1367,17 +1370,19 @@ function buildCardHtml(w, q) {
   return `
     <div class="vocab-card" data-word-id="${escAttr(String(w.id))}">
       <div class="card-header">
-        <div class="card-word word-truncate" title="${escAttr(w.displayWord)}">${highlight(w.displayWord, q)}</div>
-        ${w._local ? `<span class="local-badge" title="Not yet synced">⏳</span>` : ""}
-        ${isIncomplete ? `<span class="incomplete-badge" title="No definition added yet">Incomplete</span>` : ""}
-        ${w.createdAt ? `<div class="card-date">${fmtDate(w.createdAt)}</div>` : ""}
+        <div class="card-header-main">
+          <div class="card-word word-truncate" title="${escAttr(w.displayWord)}">${highlight(w.displayWord, q)}</div>
+          ${w._local ? `<span class="local-badge" title="Not yet synced">⏳</span>` : ""}
+          ${isIncomplete ? `<span class="incomplete-badge" title="No definition added yet">Incomplete</span>` : ""}
+          ${w.createdAt ? `<div class="card-date">${fmtDate(w.createdAt)}</div>` : ""}
+        </div>
+        <div class="card-word-actions">
+          <button class="btn btn-icon rename" onclick="openRenameWordModal('${escAttr(String(w.id))}')" title="Rename word">✏️</button>
+          <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Speak word">🔊</button>
+          <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(String(w.id))}')" title="Delete word">🗑</button>
+        </div>
       </div>
       <div class="card-entries">${entriesHtml}</div>
-      <div class="card-actions">
-        <button class="btn btn-icon rename" onclick="openRenameWordModal('${escAttr(String(w.id))}')" title="Rename word">✏️</button>
-        <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Speak word">🔊</button>
-        <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(String(w.id))}')" title="Delete word">🗑</button>
-      </div>
     </div>`;
 }
 
