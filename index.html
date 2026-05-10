@@ -16,6 +16,91 @@
   </script>
 
   <style>
+    /* ══════════════════════════════════════════════════
+       DENSITY REFINEMENT — table rows
+       Base: td padding 12px 16px
+       ══════════════════════════════════════════════════ */
+    .vocab-table td {
+      padding-top: 9px;
+      padding-bottom: 9px;
+    }
+    /* Mobile already has its own compact padding — preserve */
+    @media (max-width: 700px) {
+      .vocab-table td { padding-top: 10px; padding-bottom: 10px; }
+    }
+
+    /* Entry blocks: base margin-bottom 12px → tighten */
+    .entry-block {
+      margin-bottom: 8px;
+    }
+
+    /* Entry divider: base margin 10px 0 → tighten */
+    .entry-divider {
+      margin: 7px 0;
+    }
+
+    /* Clamp cell spacing: base margin-bottom 6px → slight tighten */
+    .clamp-cell {
+      margin-bottom: 4px;
+    }
+    .clamp-cell + .clamp-cell { margin-top: 4px; }
+
+    /* ══════════════════════════════════════════════════
+       DENSITY REFINEMENT — cards
+       Base: vocab-card padding 18px, gap 12px
+       ══════════════════════════════════════════════════ */
+    .vocab-card {
+      padding: 14px 16px;
+      gap: 10px;
+    }
+
+    /* Card entry: base padding 10px 0 → tighten */
+    .card-entry {
+      padding-top: 7px;
+      padding-bottom: 7px;
+    }
+
+    /* Card word font: slightly tighter — preserve display font */
+    .card-word {
+      font-size: 1.08rem;
+    }
+
+    /* Card date: tighten top padding */
+    .card-date {
+      padding-top: 2px;
+    }
+
+    /* card-def-num: base margin-bottom 4px → keep */
+
+    /* ══════════════════════════════════════════════════
+       DENSITY REFINEMENT — word cell spacing
+       ══════════════════════════════════════════════════ */
+    .word-cell-actions {
+      margin-top: 4px;
+    }
+
+    /* ══════════════════════════════════════════════════
+       DENSITY REFINEMENT — entry text rhythm
+       ══════════════════════════════════════════════════ */
+    .entry-def {
+      line-height: 1.5;
+    }
+    .entry-ex {
+      line-height: 1.45;
+      margin-top: 2px;
+    }
+
+    /* ══════════════════════════════════════════════════
+       DENSITY REFINEMENT — cards grid gap
+       Base: 16px → slight tighten
+       ══════════════════════════════════════════════════ */
+    .cards-grid {
+      gap: 12px;
+    }
+
+    /* ══════════════════════════════════════════════════
+       EXISTING INLINE STYLE BLOCK BELOW (untouched)
+       ══════════════════════════════════════════════════ */
     .actions-th-empty {
       padding: 0;
       width: 0;
@@ -34,8 +119,8 @@
     .word-cell-actions {
       display: flex;
       align-items: center;
-      gap: 4px;
-      margin-top: 4px;
+      gap: 3px;
+      margin-top: 5px;
     }
     /* Hide empty actions column but keep it in DOM for structure */
     .actions-cell:empty {
@@ -63,8 +148,26 @@
     .card-word-actions {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 3px;
       flex-shrink: 0;
+      padding-top: 2px;
+    }
+
+    /* ── Entry-level action rows: subtle gap refinement ────────── */
+    .entry-actions-row {
+      gap: 4px;
+    }
+    .card-entry-row {
+      gap: 4px;
+    }
+
+    /* ── Definition text: slightly more breathing room ──────────── */
+    .entry-def {
+      line-height: 1.55;
+    }
+    .entry-ex {
+      line-height: 1.5;
+      opacity: 0.78;
     }
 
     /* ── Mobile: stack word actions below word ──────────────────── */
@@ -74,26 +177,51 @@
       }
       .word-cell-actions {
         flex-wrap: wrap;
+        gap: 4px;
+      }
+      .card-word-actions {
+        gap: 4px;
       }
     }
 
     /* ── Part 1+2: Icon-only action buttons — unified size ─────── */
     .btn.btn-icon {
-      min-width: 32px;
-      min-height: 32px;
-      width: 32px;
-      height: 32px;
+      min-width: 28px;
+      min-height: 28px;
+      width: 28px;
+      height: 28px;
       padding: 0;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 1rem;
+      font-size: 0.88rem;
       flex-shrink: 0;
+      /* Softer visual weight */
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      opacity: 0.65;
+      transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+    .btn.btn-icon:hover {
+      opacity: 1;
+      background: rgba(255,255,255,0.07);
+      border-color: rgba(255,255,255,0.22);
+    }
+    /* Mobile: keep touch targets at 32px */
+    @media (max-width: 700px) {
+      .btn.btn-icon {
+        min-width: 32px;
+        min-height: 32px;
+        width: 32px;
+        height: 32px;
+        font-size: 0.95rem;
+        opacity: 0.75;
+      }
     }
     .card-actions .btn.btn-icon,
     .actions-cell .btn.btn-icon {
-      width: 32px;
-      height: 32px;
+      /* inherit from .btn.btn-icon */
     }
 
     /* ── Part 3: Incomplete word subtle visual ─────────────────── */
