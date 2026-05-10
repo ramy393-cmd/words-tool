@@ -28,6 +28,7 @@ let state = {
   editEntryId:  null,
   search:       "",
   sort:         "newest",
+  filter:       "all",
   view:         isMobile() ? "table" : "table",
   expandedCells: {},
   expandedDefs:  {},
@@ -869,6 +870,12 @@ function getFilteredWords() {
       );
     });
   }
+  if (state.filter === "complete") {
+    words = words.filter(w => (w.entries || []).length > 0);
+  }
+  if (state.filter === "incomplete") {
+    words = words.filter(w => (w.entries || []).length === 0);
+  }
   if (state.sort === "oldest") {
     words = words.slice().sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
   } else if (state.sort === "az") {
@@ -1336,6 +1343,7 @@ document.getElementById("mergeModal").addEventListener("click", function(e) { if
 
 document.getElementById("searchInput").addEventListener("input", function() { state.search = this.value; render(); });
 document.getElementById("sortSelect").addEventListener("change", function() { state.sort = this.value; render(); });
+document.getElementById("filterSelect").addEventListener("change", function() { state.filter = this.value; render(); });
 
 document.querySelectorAll(".view-toggle .vbtn").forEach(btn => {
   btn.addEventListener("click", () => setView(btn.dataset.view));
