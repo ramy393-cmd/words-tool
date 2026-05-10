@@ -14,6 +14,60 @@
   <script>
     window.APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzcrin0ZHvK54sZsVRrIiEekD_ViTYobuehGmdqQkX8u6qdAWDhGm09A0D7QCI9NdYY/exec";
   </script>
+
+  <style>
+    /* ── Typo Suggestion Bar ────────────────────────────────── */
+    .typo-suggestion-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      background: var(--surface-2, #1a1a2e);
+      border: 1px solid var(--accent, #7c6af7);
+      border-radius: 8px;
+      padding: 10px 16px;
+      margin: 8px 0 4px;
+      font-size: 0.9rem;
+      animation: fadeIn .2s ease;
+    }
+    .typo-suggestion-bar .typo-msg { flex: 1; min-width: 160px; }
+    .typo-suggestion-bar .btn-sm { padding: 4px 12px; font-size: 0.82rem; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; } }
+
+    /* ── Rename Word Modal ─────────────────────────────────── */
+    /* Uses existing modal styles — just needs unique ID */
+
+    /* ── Incomplete hint text ──────────────────────────────── */
+    .incomplete-hint {
+      font-size: 0.82rem;
+      opacity: 0.55;
+      font-style: italic;
+    }
+
+    /* ── Rename button in actions ─────────────────────────── */
+    .btn-icon.rename {
+      font-size: 0.78rem;
+      gap: 3px;
+    }
+
+    /* ── Part 6: Mobile safety — prevent button overlap ────── */
+    @media (max-width: 700px) {
+      .actions-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-start;
+      }
+      .card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .card-actions .btn {
+        flex-shrink: 0;
+      }
+    }
+  </style>
 </head>
 
 <body>
@@ -168,6 +222,23 @@
       <div class="modal-actions">
         <button id="editCancelBtn" class="btn btn-ghost">Cancel</button>
         <button id="editSaveBtn" class="btn btn-primary">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RENAME WORD MODAL -->
+  <div id="renameWordModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="renameWordModalTitle">
+    <div class="modal">
+      <div class="modal-title" id="renameWordModalTitle">Rename Word</div>
+      <div class="modal-subtitle">Edit the word or phrase text. Definitions and examples are preserved.</div>
+      <input type="hidden" id="renameWordId">
+      <div class="input-group" style="margin-bottom:12px">
+        <label for="renameWordInput">Word / Phrase</label>
+        <input id="renameWordInput" type="text" placeholder="e.g. substitute" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="modal-actions">
+        <button id="renameWordCancelBtn" class="btn btn-ghost">Cancel</button>
+        <button id="renameWordSaveBtn" class="btn btn-primary">Rename</button>
       </div>
     </div>
   </div>

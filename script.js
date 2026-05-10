@@ -18,6 +18,24 @@ dbg("Environment →", ENV);
 
 const isMobile = () => window.innerWidth <= 700;
 
+// ── PART 5: Load persisted UI preferences ──────────────────────
+function loadUIPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem("uiPrefs") || "{}");
+  } catch { return {}; }
+}
+function saveUIPrefs() {
+  try {
+    localStorage.setItem("uiPrefs", JSON.stringify({
+      filter: state.filter,
+      sort:   state.sort,
+      view:   state.view,
+    }));
+  } catch {}
+}
+
+const _uiPrefs = loadUIPrefs();
+
 let state = {
   words:        [],
   localWords:   JSON.parse(localStorage.getItem("localWords") || "[]"),
@@ -27,9 +45,9 @@ let state = {
   editWordId:   null,
   editEntryId:  null,
   search:       "",
-  sort:         "newest",
-  filter:       "all",
-  view:         isMobile() ? "table" : "table",
+  sort:         _uiPrefs.sort   || "newest",
+  filter:       _uiPrefs.filter || "all",
+  view:         _uiPrefs.view   || "table",
   expandedCells: {},
   expandedDefs:  {},
 };
@@ -335,6 +353,31 @@ async function syncLocalToServer() {
     let allEntriesSynced = true;
     let serverResult = null;
 
+    // Handle RENAME: word has _renamedFrom flag
+    if (localWord._renamedFrom) {
+      try {
+        const result = await api("RENAME_WORD", {
+          id:          String(localWord.id),
+          displayWord: localWord.displayWord,
+        });
+        serverResult = result;
+        mergeResultIntoState(result);
+        syncedCount++;
+      } catch (err) {
+        dbg("Sync RENAME failed:", localWord.displayWord, err.message);
+        allEntriesSynced = false;
+        failedCount++;
+      }
+
+      if (allEntriesSynced && serverResult) {
+        const idx = state.localWords.findIndex(w => w.id === localWord.id);
+        if (idx >= 0) {
+          state.localWords[idx] = { ...serverResult, _local: false };
+        }
+      }
+      continue;
+    }
+
     if (entries.length === 0) {
       try {
         const result = await api("ADD", {
@@ -458,6 +501,75 @@ async function generatePrompt() {
   }
 }
 
+// ── PART 3: Typo / Spelling Suggestion System ─────────────────
+let _typoSuggestTimeout = null;
+let _typoSuggestionWord = null;
+
+function dismissTypoSuggestion() {
+  const bar = document.getElementById("typoSuggestionBar");
+  if (bar) bar.remove();
+  _typoSuggestionWord = null;
+}
+
+function showTypoSuggestion(original, suggestion) {
+  dismissTypoSuggestion();
+  _typoSuggestionWord = suggestion;
+
+  const bar = document.createElement("div");
+  bar.id = "typoSuggestionBar";
+  bar.className = "typo-suggestion-bar";
+  bar.innerHTML = `
+    <span class="typo-msg">Did you mean: <strong>${escHtml(suggestion)}</strong>?</span>
+    <button class="btn btn-primary btn-sm" id="typoUseSuggestion">Use Suggestion</button>
+    <button class="btn btn-ghost btn-sm" id="typoKeepWord">Keep My Word</button>
+  `;
+
+  const inputPanel = document.querySelector(".input-panel");
+  if (inputPanel) {
+    inputPanel.insertAdjacentElement("afterend", bar);
+  }
+
+  document.getElementById("typoUseSuggestion").addEventListener("click", () => {
+    document.getElementById("wordInput").value = suggestion;
+    dismissTypoSuggestion();
+  });
+  document.getElementById("typoKeepWord").addEventListener("click", () => {
+    dismissTypoSuggestion();
+  });
+}
+
+async function checkTypoSuggestion(word) {
+  if (!word || word.length < 4) return; // Skip short words / acronyms
+  if (/^\d/.test(word)) return;         // Skip words starting with number
+  if (word === word.toUpperCase()) return; // Skip ALL CAPS (acronyms)
+  if (word.split(" ").length > 5) return; // Skip very long phrases
+
+  const wordLower = word.toLowerCase();
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 4000);
+    const url = `https://api.datamuse.com/words?sp=${encodeURIComponent(wordLower)}&max=1`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(tid);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.length) return;
+    const top = data[0].word;
+    // Only suggest if different and score is high (> 500) and similar in length
+    const score = data[0].score || 0;
+    if (
+      top &&
+      top.toLowerCase() !== wordLower &&
+      score > 500 &&
+      Math.abs(top.length - wordLower.length) <= 3
+    ) {
+      showTypoSuggestion(word, top);
+    }
+  } catch {
+    // API failure — silently continue, no crash
+  }
+}
+
 async function addWord() {
   const wordEl = document.getElementById("wordInput");
   const defEl  = document.getElementById("defInput");
@@ -504,6 +616,12 @@ async function addWord() {
   addBtn.textContent = "Add Word";
   render();
   updateStats();
+
+  // PART 3: Check typo after save (non-blocking, debounced)
+  clearTimeout(_typoSuggestTimeout);
+  _typoSuggestTimeout = setTimeout(() => {
+    checkTypoSuggestion(word);
+  }, 300);
 
   if (!state.isOfflineMode) {
     _pushWordToServer(localWord, word, def, ex);
@@ -650,15 +768,21 @@ function closeMergeModal() {
   _pendingMerge = null;
 }
 
+// ── PART 1: Stable Edit Modal ─────────────────────────────────
 function openEditModal(wordId, entryId) {
   const word = state.words.find(w => String(w.id) === String(wordId));
   if (!word) { dbg("openEditModal: word not found", wordId); return; }
-  document.getElementById("editWordId").value  = wordId;
-  document.getElementById("editEntryId").value = entryId;
-  if (entryId === "new") {
+
+  document.getElementById("editWordId").value  = String(wordId);
+  document.getElementById("editEntryId").value = String(entryId);
+
+  if (String(entryId) === "new") {
+    // Incomplete word — create first definition
+    document.getElementById("editModalTitle").textContent = "Add First Definition";
     document.getElementById("editDef").value = "";
     document.getElementById("editEx").value  = "";
   } else {
+    document.getElementById("editModalTitle").textContent = "Edit Definition";
     const entry = word.entries.find(e => String(e.id) === String(entryId));
     if (!entry) { dbg("openEditModal: entry not found", wordId, entryId); return; }
     document.getElementById("editDef").value = entry.def;
@@ -669,6 +793,7 @@ function openEditModal(wordId, entryId) {
 
 function closeEditModal() {
   document.getElementById("editModal").classList.remove("open");
+  document.getElementById("editModalTitle").textContent = "Edit Definition";
 }
 
 async function saveEdit() {
@@ -684,7 +809,7 @@ async function saveEdit() {
 
   const stateWord = state.words.find(w => String(w.id) === String(wordId));
 
-  if (entryId === "new") {
+  if (String(entryId) === "new") {
     // Incomplete word: create its first definition entry
     if (stateWord && hasDuplicateDef(stateWord.entries, def)) {
       toast("This definition already exists for this word.", "warning");
@@ -735,6 +860,7 @@ async function saveEdit() {
     return;
   }
 
+  // Editing existing entry
   if (stateWord) {
     const otherEntries = stateWord.entries.filter(e => String(e.id) !== String(entryId));
     if (hasDuplicateDef(otherEntries, def)) {
@@ -865,7 +991,6 @@ async function deleteWord(id) {
   }
 }
 
-
 async function deleteEntry(wordId, entryId) {
   if (!confirm("Delete this definition?")) return;
 
@@ -902,6 +1027,99 @@ async function deleteEntry(wordId, entryId) {
   }
 }
 
+// ── PART 2: Edit Word (rename) ────────────────────────────────
+function openRenameWordModal(wordId) {
+  const word = state.words.find(w => String(w.id) === String(wordId));
+  if (!word) return;
+  document.getElementById("renameWordId").value    = String(wordId);
+  document.getElementById("renameWordInput").value = word.displayWord;
+  document.getElementById("renameWordModal").classList.add("open");
+  setTimeout(() => {
+    const inp = document.getElementById("renameWordInput");
+    if (inp) { inp.focus(); inp.select(); }
+  }, 80);
+}
+
+function closeRenameWordModal() {
+  document.getElementById("renameWordModal").classList.remove("open");
+}
+
+async function saveRenameWord() {
+  const wordId     = document.getElementById("renameWordId").value;
+  const newDisplay = document.getElementById("renameWordInput").value.trim();
+  if (!newDisplay) { toast("Word cannot be empty.", "warning"); return; }
+
+  const stateWord = state.words.find(w => String(w.id) === String(wordId));
+  if (!stateWord) { closeRenameWordModal(); return; }
+
+  const oldDisplay = stateWord.displayWord;
+  if (normalizeWord(newDisplay) === normalizeWord(oldDisplay)) {
+    closeRenameWordModal();
+    return; // No change
+  }
+
+  // Duplicate check — don't allow rename to an already existing word
+  const duplicate = state.words.find(
+    w => String(w.id) !== String(wordId) &&
+         normalizeWord(w.displayWord) === normalizeWord(newDisplay)
+  );
+  if (duplicate) {
+    toast(`"${newDisplay}" already exists. Use merge instead.`, "warning");
+    return;
+  }
+
+  const saveBtn = document.getElementById("renameWordSaveBtn");
+  saveBtn.disabled    = true;
+  saveBtn.textContent = "Saving…";
+
+  // Update state
+  stateWord.displayWord = newDisplay;
+  stateWord.word        = normalizeWord(newDisplay);
+
+  // Update localWords
+  const localWord = state.localWords.find(w => String(w.id) === String(wordId));
+  if (localWord) {
+    localWord.displayWord  = newDisplay;
+    localWord.word         = normalizeWord(newDisplay);
+    localWord._local       = true;
+    localWord._renamedFrom = oldDisplay;
+  } else {
+    mergeIntoLocalWords({ ...stateWord, _local: true, _renamedFrom: oldDisplay });
+  }
+  saveLocalWords();
+
+  closeRenameWordModal();
+  render();
+  updateStats();
+
+  if (!state.isOfflineMode) {
+    try {
+      const result = await api("RENAME_WORD", { id: String(wordId), displayWord: newDisplay });
+      if (result && result.id) {
+        const idx = state.words.findIndex(w => String(w.id) === String(result.id));
+        if (idx >= 0) state.words[idx] = { ...result };
+        const lidx = state.localWords.findIndex(w => String(w.id) === String(result.id));
+        if (lidx >= 0) {
+          const prev = state.localWords[lidx];
+          state.localWords[lidx] = { ...result, _local: false, _renamedFrom: undefined };
+          delete state.localWords[lidx]._renamedFrom;
+        }
+        saveLocalWords();
+        render();
+        updateStats();
+      }
+      toast("Word renamed!", "success");
+    } catch (err) {
+      dbg("RENAME_WORD server failed:", err.message);
+      toast("Saved locally. Will sync when online.", "warning");
+    }
+  } else {
+    toast("Saved locally. Will sync when online.", "warning");
+  }
+
+  saveBtn.disabled    = false;
+  saveBtn.textContent = "Rename";
+}
 
 async function syncQueue() {
   await syncLocalToServer();
@@ -1017,20 +1235,31 @@ function toggleShowMoreDefs(wordId) {
   detectOverflow();
 }
 
+// ── PART 1: buildDefCellHtml — stable IDs, no index reliance ──
 function buildDefCellHtml(w, q) {
   const isIncomplete = !Array.isArray(w.entries) || w.entries.length === 0;
-  const allEntries = isIncomplete
-    ? [{ id: "new", def: w.def || "", ex: w.ex || "" }]
-    : w.entries;
 
-  const expanded = !!state.expandedDefs[String(w.id)];
-  const entries  = expanded ? allEntries : allEntries.slice(0, 1);
-  const hasMore  = allEntries.length > 1;
+  if (isIncomplete) {
+    // Incomplete word: show only the add-definition button
+    return `<div class="entry-block incomplete-entry">
+      <div class="entry-actions-row">
+        <span class="incomplete-hint">No definition yet</span>
+        <button class="btn btn-icon edit entry-edit-btn"
+          onclick="openEditModal('${escAttr(String(w.id))}','new')"
+          title="Add first definition">✏️</button>
+      </div>
+    </div>`;
+  }
+
+  const allEntries = w.entries;
+  const expanded   = !!state.expandedDefs[String(w.id)];
+  const entries    = expanded ? allEntries : allEntries.slice(0, 1);
+  const hasMore    = allEntries.length > 1;
 
   const entriesHtml = entries.map((e) => {
-    const trueIndex = allEntries.indexOf(e);
-    const defKey = `${w.id}-${e.id}-def`;
-    const exKey  = `${w.id}-${e.id}-ex`;
+    const trueIndex = allEntries.findIndex(ae => ae.id === e.id);
+    const defKey    = `${w.id}-${e.id}-def`;
+    const exKey     = `${w.id}-${e.id}-ex`;
     const labelHtml = allEntries.length > 1
       ? `<div class="entry-num">Def. ${trueIndex + 1}</div>`
       : "";
@@ -1060,7 +1289,7 @@ function buildDefCellHtml(w, q) {
   }).join('<div class="entry-divider"></div>');
 
   const remaining = allEntries.length - 1;
-  const moreBtn = hasMore
+  const moreBtn   = hasMore
     ? `<button class="show-more-btn" onclick="toggleShowMoreDefs('${escAttr(String(w.id))}')">
          ${expanded ? "Collapse ▲" : `Show ${remaining} more definition${remaining > 1 ? "s" : ""}`}
        </button>`
@@ -1069,51 +1298,70 @@ function buildDefCellHtml(w, q) {
   return entriesHtml + moreBtn;
 }
 
+// ── PART 1: buildTableRow — stable IDs, rename button ────────
 function buildTableRow(w, q) {
+  const isIncomplete = !Array.isArray(w.entries) || w.entries.length === 0;
   return `
     <tr data-word-id="${escAttr(String(w.id))}">
       <td class="word-cell">
         <span class="word-text word-truncate" title="${escAttr(w.displayWord)}">${highlight(w.displayWord, q)}</span>
-        ${w.entries.length > 1 ? `<span class="entry-count-badge">${w.entries.length}</span>` : ""}
-        ${(!Array.isArray(w.entries) || w.entries.length === 0) ? `<span class="incomplete-badge" title="No definition added yet">Incomplete</span>` : ""}
+        ${w.entries && w.entries.length > 1 ? `<span class="entry-count-badge">${w.entries.length}</span>` : ""}
+        ${isIncomplete ? `<span class="incomplete-badge" title="No definition added yet">Incomplete</span>` : ""}
         ${w._local ? `<span class="local-badge" title="Not yet synced">⏳</span>` : ""}
       </td>
       <td class="def-cell">${buildDefCellHtml(w, q)}</td>
       <td class="actions-cell">
-        ${(!Array.isArray(w.entries) || w.entries.length === 0) ? `<button class="btn btn-icon edit" onclick="openEditModal('${escAttr(String(w.id))}','new')" title="Add definition">✏️</button>` : ""}
+        <button class="btn btn-icon rename" onclick="openRenameWordModal('${escAttr(String(w.id))}')" title="Rename word">✏️ Rename</button>
         <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Pronounce">🔊</button>
         <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(String(w.id))}')" title="Delete word">🗑</button>
       </td>
     </tr>`;
 }
 
+// ── PART 1: buildCardHtml — stable IDs, rename button ─────────
 function buildCardHtml(w, q) {
   const isIncomplete = !Array.isArray(w.entries) || w.entries.length === 0;
-  let entriesHtml = w.entries.map((e, i) => {
-    const defKey = `${w.id}-${e.id}-card-def`;
-    const exKey  = `${w.id}-${e.id}-card-ex`;
-    return `
-      <div class="card-entry">
-        ${w.entries.length > 1 ? `<div class="card-def-num">Definition ${i + 1}</div>` : ""}
-        <div class="card-entry-row">
-          <div class="card-entry-content">
-            <div class="clamp-cell" data-clamp-key="${escAttr(defKey)}">
-              <div class="entry-def clamp-text">${highlight(e.def, q)}</div>
-              <button class="read-more-btn" onclick="toggleReadMore(this)">Read more ▼</button>
-            </div>
-            ${(e.ex && e.ex.trim()) ? `
-              <div class="clamp-cell" data-clamp-key="${escAttr(exKey)}">
-                <div class="entry-ex clamp-text">${highlight(e.ex, q)}</div>
-                <button class="read-more-btn" onclick="toggleReadMore(this)">Read more ▼</button>
-              </div>` : ""}
-          </div>
-          <button class="btn btn-icon edit card-entry-edit-btn" onclick="openEditModal('${escAttr(String(w.id))}','${escAttr(String(e.id))}')" title="Edit this definition">✏️</button>
-          <button class="btn btn-icon delete card-entry-edit-btn" onclick="event.stopPropagation();deleteEntry('${escAttr(String(w.id))}','${escAttr(String(e.id))}')" title="Delete this definition">🗑</button>
-        </div>
-      </div>`;
-  }).join('<div class="entry-divider"></div>');
+
+  let entriesHtml;
   if (isIncomplete) {
-    entriesHtml = `<div class="card-entry"><div class="card-entry-row"><div class="card-entry-content"></div><button class="btn btn-icon edit card-entry-edit-btn" onclick="openEditModal('${escAttr(String(w.id))}','new')" title="Add definition">✏️</button></div></div>`;
+    entriesHtml = `<div class="card-entry">
+      <div class="card-entry-row">
+        <div class="card-entry-content">
+          <span class="incomplete-hint">No definition yet</span>
+        </div>
+        <button class="btn btn-icon edit card-entry-edit-btn"
+          onclick="openEditModal('${escAttr(String(w.id))}','new')"
+          title="Add first definition">✏️</button>
+      </div>
+    </div>`;
+  } else {
+    entriesHtml = w.entries.map((e, i) => {
+      const defKey = `${w.id}-${e.id}-card-def`;
+      const exKey  = `${w.id}-${e.id}-card-ex`;
+      return `
+        <div class="card-entry">
+          ${w.entries.length > 1 ? `<div class="card-def-num">Definition ${i + 1}</div>` : ""}
+          <div class="card-entry-row">
+            <div class="card-entry-content">
+              <div class="clamp-cell" data-clamp-key="${escAttr(defKey)}">
+                <div class="entry-def clamp-text">${highlight(e.def, q)}</div>
+                <button class="read-more-btn" onclick="toggleReadMore(this)">Read more ▼</button>
+              </div>
+              ${(e.ex && e.ex.trim()) ? `
+                <div class="clamp-cell" data-clamp-key="${escAttr(exKey)}">
+                  <div class="entry-ex clamp-text">${highlight(e.ex, q)}</div>
+                  <button class="read-more-btn" onclick="toggleReadMore(this)">Read more ▼</button>
+                </div>` : ""}
+            </div>
+            <button class="btn btn-icon edit card-entry-edit-btn"
+              onclick="openEditModal('${escAttr(String(w.id))}','${escAttr(String(e.id))}')"
+              title="Edit this definition">✏️</button>
+            <button class="btn btn-icon delete card-entry-edit-btn"
+              onclick="event.stopPropagation();deleteEntry('${escAttr(String(w.id))}','${escAttr(String(e.id))}')"
+              title="Delete this definition">🗑</button>
+          </div>
+        </div>`;
+    }).join('<div class="entry-divider"></div>');
   }
 
   return `
@@ -1121,11 +1369,12 @@ function buildCardHtml(w, q) {
       <div class="card-header">
         <div class="card-word word-truncate" title="${escAttr(w.displayWord)}">${highlight(w.displayWord, q)}</div>
         ${w._local ? `<span class="local-badge" title="Not yet synced">⏳</span>` : ""}
-        ${(!Array.isArray(w.entries) || w.entries.length === 0) ? `<span class="incomplete-badge" title="No definition added yet">Incomplete</span>` : ""}
+        ${isIncomplete ? `<span class="incomplete-badge" title="No definition added yet">Incomplete</span>` : ""}
         ${w.createdAt ? `<div class="card-date">${fmtDate(w.createdAt)}</div>` : ""}
       </div>
       <div class="card-entries">${entriesHtml}</div>
       <div class="card-actions">
+        <button class="btn btn-icon rename" onclick="openRenameWordModal('${escAttr(String(w.id))}')" title="Rename word">✏️ Rename</button>
         <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Pronounce">🔊 Speak</button>
         <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(String(w.id))}')" title="Delete">🗑 Delete</button>
       </div>
@@ -1192,6 +1441,7 @@ function setView(view) {
   if (view === "table") { tableWrapper.classList.remove("hidden"); cardsWrapper.classList.add("hidden"); }
   else { tableWrapper.classList.add("hidden"); cardsWrapper.classList.remove("hidden"); }
   btns.forEach(b => b.classList.toggle("active", b.dataset.view === view));
+  saveUIPrefs();
   render();
 }
 
@@ -1222,7 +1472,7 @@ function attachMobileRowExpand() {
   });
 }
 
-/* ── Desktop card word click expand / collapse ───────────── */
+/* ── Desktop card word click expand / collapse ───────────────── */
 function attachDesktopCardExpand() {
   const grid = document.getElementById("cardsGrid");
   if (!grid) return;
@@ -1238,7 +1488,6 @@ function attachDesktopCardExpand() {
     });
   });
 }
-
 
 function exportCSV() {
   if (!state.words.length) { toast("Nothing to export.", "warning"); return; }
@@ -1371,15 +1620,19 @@ function escAttr(str) {
   return String(str).replace(/'/g, "\\'").replace(/"/g, "&quot;");
 }
 
-window.cancelEdit         = cancelEdit;
-window.startEdit          = startEdit;
-window.openEditModal      = openEditModal;
-window.deleteWord         = deleteWord;
-window.deleteEntry        = deleteEntry;
-window.speak              = speak;
-window.toggleReadMore     = toggleReadMore;
-window.toggleShowMoreDefs = toggleShowMoreDefs;
-window.manualSync         = manualSync;
+// ── Expose globals ─────────────────────────────────────────────
+window.cancelEdit            = cancelEdit;
+window.startEdit             = startEdit;
+window.openEditModal         = openEditModal;
+window.deleteWord            = deleteWord;
+window.deleteEntry           = deleteEntry;
+window.speak                 = speak;
+window.toggleReadMore        = toggleReadMore;
+window.toggleShowMoreDefs    = toggleShowMoreDefs;
+window.manualSync            = manualSync;
+window.openRenameWordModal   = openRenameWordModal;
+window.closeRenameWordModal  = closeRenameWordModal;
+window.saveRenameWord        = saveRenameWord;
 
 document.getElementById("addBtn").addEventListener("click", addWord);
 document.getElementById("generatePromptBtn").addEventListener("click", generatePrompt);
@@ -1405,9 +1658,34 @@ document.getElementById("mergeCancelBtn").addEventListener("click", closeMergeMo
 document.getElementById("editModal").addEventListener("click", function(e) { if (e.target === this) closeEditModal(); });
 document.getElementById("mergeModal").addEventListener("click", function(e) { if (e.target === this) closeMergeModal(); });
 
-document.getElementById("searchInput").addEventListener("input", function() { state.search = this.value; render(); });
-document.getElementById("sortSelect").addEventListener("change", function() { state.sort = this.value; render(); });
-document.getElementById("filterSelect").addEventListener("change", function() { state.filter = this.value; render(); });
+// Rename Word Modal button listeners
+document.getElementById("renameWordSaveBtn").addEventListener("click", saveRenameWord);
+document.getElementById("renameWordCancelBtn").addEventListener("click", closeRenameWordModal);
+document.getElementById("renameWordModal").addEventListener("click", function(e) { if (e.target === this) closeRenameWordModal(); });
+document.getElementById("renameWordInput").addEventListener("keydown", e => { if (e.key === "Enter") saveRenameWord(); if (e.key === "Escape") closeRenameWordModal(); });
+
+document.getElementById("searchInput").addEventListener("input", function() {
+  state.search = this.value;
+  render();
+});
+document.getElementById("sortSelect").addEventListener("change", function() {
+  state.sort = this.value;
+  saveUIPrefs();
+  render();
+});
+document.getElementById("filterSelect").addEventListener("change", function() {
+  state.filter = this.value;
+  saveUIPrefs();
+  render();
+});
+
+// ── PART 5: Restore persisted UI state ────────────────────────
+(function restoreUIPrefs() {
+  const sortEl   = document.getElementById("sortSelect");
+  const filterEl = document.getElementById("filterSelect");
+  if (sortEl   && state.sort)   sortEl.value   = state.sort;
+  if (filterEl && state.filter) filterEl.value = state.filter;
+})();
 
 document.querySelectorAll(".view-toggle .vbtn").forEach(btn => {
   btn.addEventListener("click", () => setView(btn.dataset.view));
@@ -1430,6 +1708,6 @@ if ("serviceWorker" in navigator && (location.protocol === "http:" || location.p
   dbg("Service worker skipped (file:// or unsupported)");
 }
 
-setView("table");
+setView(state.view);
 showLoadingState();
 updateOnlineStatus().then(() => fetchWords());
