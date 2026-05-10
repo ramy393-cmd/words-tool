@@ -960,9 +960,10 @@ function toggleShowMoreDefs(wordId) {
 }
 
 function buildDefCellHtml(w, q) {
-  const allEntries = Array.isArray(w.entries) && w.entries.length > 0
-    ? w.entries
-    : [{ id: w.id + "-0", def: w.def || "", ex: w.ex || "" }];
+  const isIncomplete = !Array.isArray(w.entries) || w.entries.length === 0;
+  const allEntries = isIncomplete
+    ? [{ id: w.id + "-0", def: w.def || "", ex: w.ex || "", _synthetic: true }]
+    : w.entries;
 
   const expanded = !!state.expandedDefs[String(w.id)];
   const entries  = expanded ? allEntries : allEntries.slice(0, 1);
@@ -981,6 +982,7 @@ function buildDefCellHtml(w, q) {
            <button class="read-more-btn" onclick="toggleReadMore(this)">Read more ▼</button>
          </div>`
       : "";
+    const actionBtns = e._synthetic ? "" : `<button class="btn btn-icon edit entry-edit-btn" onclick="openEditModal('${escAttr(String(w.id))}','${escAttr(String(e.id))}')" title="Edit this definition">✏️</button><button class="btn btn-icon delete entry-edit-btn" onclick="event.stopPropagation();deleteEntry('${escAttr(String(w.id))}','${escAttr(String(e.id))}')" title="Delete this definition">🗑</button>`;
     return `
     <div class="entry-block">
       ${labelHtml}
@@ -989,12 +991,7 @@ function buildDefCellHtml(w, q) {
           <div class="entry-def clamp-text">${highlight(e.def, q)}</div>
           <button class="read-more-btn" onclick="toggleReadMore(this)">Read more ▼</button>
         </div>
-        <button class="btn btn-icon edit entry-edit-btn"
-          onclick="openEditModal('${escAttr(String(w.id))}','${escAttr(String(e.id))}')"
-          title="Edit this definition">✏️</button>
-        <button class="btn btn-icon delete entry-edit-btn"
-          onclick="event.stopPropagation();deleteEntry('${escAttr(String(w.id))}','${escAttr(String(e.id))}')"
-          title="Delete this definition">🗑</button>
+        ${actionBtns}
       </div>
       ${exHtml}
     </div>`;
