@@ -16,6 +16,63 @@
   </script>
 
   <style>
+    /* ── Part 1+2: Icon-only action buttons — unified size ─────── */
+    .btn.btn-icon {
+      min-width: 32px;
+      min-height: 32px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+    .card-actions .btn.btn-icon,
+    .actions-cell .btn.btn-icon {
+      width: 32px;
+      height: 32px;
+    }
+
+    /* ── Part 3: Incomplete word subtle visual ─────────────────── */
+    tr[data-word-id] .incomplete-badge,
+    .vocab-card .incomplete-badge {
+      background: transparent;
+      border: 1px dashed rgba(255,255,255,0.22);
+      color: rgba(255,255,255,0.45);
+      font-size: 0.72rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-style: italic;
+      letter-spacing: 0.01em;
+    }
+    /* Subtle left accent on incomplete rows/cards */
+    tr[data-word-id]:has(.incomplete-badge) {
+      border-left: 2px solid rgba(255,255,255,0.12);
+    }
+    .vocab-card:has(.incomplete-badge) {
+      border-left: 2px dashed rgba(255,255,255,0.18);
+    }
+
+    /* ── Part 4: Search clear button polish ────────────────────── */
+    #searchClearBtn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted, #888);
+      font-size: 1.15rem;
+      padding: 0 4px;
+      line-height: 1;
+      flex-shrink: 0;
+      border-radius: 50%;
+      transition: color 0.15s;
+    }
+    #searchClearBtn:hover { color: var(--text, #eee); }
+
     /* ── Typo Suggestion Bar ────────────────────────────────── */
     .typo-suggestion-bar {
       display: flex;
@@ -139,6 +196,7 @@
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
         <input id="searchInput" type="search" placeholder="Search words, definitions…">
+        <button id="searchClearBtn" title="Clear search" style="display:none;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--text-muted,#888);font-size:1.1rem;padding:0 6px;line-height:1;flex-shrink:0;" onclick="(function(){document.getElementById('searchInput').value='';window.__vcabClearSearch&&window.__vcabClearSearch();})()">×</button>
       </div>
 
       <select id="sortSelect" class="sort-select">

@@ -1279,10 +1279,10 @@ function buildDefCellHtml(w, q) {
         </div>
         <button class="btn btn-icon edit entry-edit-btn"
           onclick="openEditModal('${escAttr(String(w.id))}','${escAttr(String(e.id))}')"
-          title="Edit this definition">✏️</button>
+          title="Edit definition">✏️</button>
         <button class="btn btn-icon delete entry-edit-btn"
           onclick="event.stopPropagation();deleteEntry('${escAttr(String(w.id))}','${escAttr(String(e.id))}')"
-          title="Delete this definition">🗑</button>
+          title="Delete entry">🗑</button>
       </div>
       ${exHtml}
     </div>`;
@@ -1311,8 +1311,8 @@ function buildTableRow(w, q) {
       </td>
       <td class="def-cell">${buildDefCellHtml(w, q)}</td>
       <td class="actions-cell">
-        <button class="btn btn-icon rename" onclick="openRenameWordModal('${escAttr(String(w.id))}')" title="Rename word">✏️ Rename</button>
-        <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Pronounce">🔊</button>
+        <button class="btn btn-icon rename" onclick="openRenameWordModal('${escAttr(String(w.id))}')" title="Rename word">✏️</button>
+        <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Speak word">🔊</button>
         <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(String(w.id))}')" title="Delete word">🗑</button>
       </td>
     </tr>`;
@@ -1355,10 +1355,10 @@ function buildCardHtml(w, q) {
             </div>
             <button class="btn btn-icon edit card-entry-edit-btn"
               onclick="openEditModal('${escAttr(String(w.id))}','${escAttr(String(e.id))}')"
-              title="Edit this definition">✏️</button>
+              title="Edit definition">✏️</button>
             <button class="btn btn-icon delete card-entry-edit-btn"
               onclick="event.stopPropagation();deleteEntry('${escAttr(String(w.id))}','${escAttr(String(e.id))}')"
-              title="Delete this definition">🗑</button>
+              title="Delete entry">🗑</button>
           </div>
         </div>`;
     }).join('<div class="entry-divider"></div>');
@@ -1374,9 +1374,9 @@ function buildCardHtml(w, q) {
       </div>
       <div class="card-entries">${entriesHtml}</div>
       <div class="card-actions">
-        <button class="btn btn-icon rename" onclick="openRenameWordModal('${escAttr(String(w.id))}')" title="Rename word">✏️ Rename</button>
-        <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Pronounce">🔊 Speak</button>
-        <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(String(w.id))}')" title="Delete">🗑 Delete</button>
+        <button class="btn btn-icon rename" onclick="openRenameWordModal('${escAttr(String(w.id))}')" title="Rename word">✏️</button>
+        <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Speak word">🔊</button>
+        <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(String(w.id))}')" title="Delete word">🗑</button>
       </div>
     </div>`;
 }
@@ -1666,8 +1666,20 @@ document.getElementById("renameWordInput").addEventListener("keydown", e => { if
 
 document.getElementById("searchInput").addEventListener("input", function() {
   state.search = this.value;
+  const clearBtn = document.getElementById("searchClearBtn");
+  if (clearBtn) clearBtn.style.display = this.value ? "flex" : "none";
   render();
 });
+
+// Part 4: Search clear button handler
+window.__vcabClearSearch = function() {
+  state.search = "";
+  const inp = document.getElementById("searchInput");
+  if (inp) inp.value = "";
+  const clearBtn = document.getElementById("searchClearBtn");
+  if (clearBtn) clearBtn.style.display = "none";
+  render();
+};
 document.getElementById("sortSelect").addEventListener("change", function() {
   state.sort = this.value;
   saveUIPrefs();
