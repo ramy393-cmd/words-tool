@@ -502,7 +502,6 @@ async function generatePrompt() {
 }
 
 // ── PART 3: Typo / Spelling Suggestion System ─────────────────
-let _typoSuggestTimeout = null;
 let _typoSuggestionWord = null;
 
 function dismissTypoSuggestion() {
@@ -511,7 +510,41 @@ function dismissTypoSuggestion() {
   _typoSuggestionWord = null;
 }
 
-function showTypoSuggestion(original, suggestion) {
+// Returns suggestion string or null — pure data, no UI side effects.
+async function getTypoSuggestion(word) {
+  if (!word || word.length < 4) return null;
+  if (/^\d/.test(word)) return null;
+  if (word === word.toUpperCase()) return null;
+  if (word.split(" ").length > 5) return null;
+
+  const wordLower = word.toLowerCase();
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 4000);
+    const url = `https://api.datamuse.com/words?sp=${encodeURIComponent(wordLower)}&max=1`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(tid);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !data.length) return null;
+    const top   = data[0].word;
+    const score = data[0].score || 0;
+    if (
+      top &&
+      top.toLowerCase() !== wordLower &&
+      score > 500 &&
+      Math.abs(top.length - wordLower.length) <= 3
+    ) {
+      return top;
+    }
+  } catch {
+    // Datamuse failure — silently continue
+  }
+  return null;
+}
+
+// Shows the inline bar. onProceed(wordToUse) is called once the user decides.
+function showTypoSuggestion(original, suggestion, onProceed) {
   dismissTypoSuggestion();
   _typoSuggestionWord = suggestion;
 
@@ -525,49 +558,17 @@ function showTypoSuggestion(original, suggestion) {
   `;
 
   const inputPanel = document.querySelector(".input-panel");
-  if (inputPanel) {
-    inputPanel.insertAdjacentElement("afterend", bar);
-  }
+  if (inputPanel) inputPanel.insertAdjacentElement("afterend", bar);
 
   document.getElementById("typoUseSuggestion").addEventListener("click", () => {
     document.getElementById("wordInput").value = suggestion;
     dismissTypoSuggestion();
+    onProceed(suggestion);
   });
   document.getElementById("typoKeepWord").addEventListener("click", () => {
     dismissTypoSuggestion();
+    onProceed(original);
   });
-}
-
-async function checkTypoSuggestion(word) {
-  if (!word || word.length < 4) return; // Skip short words / acronyms
-  if (/^\d/.test(word)) return;         // Skip words starting with number
-  if (word === word.toUpperCase()) return; // Skip ALL CAPS (acronyms)
-  if (word.split(" ").length > 5) return; // Skip very long phrases
-
-  const wordLower = word.toLowerCase();
-  try {
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 4000);
-    const url = `https://api.datamuse.com/words?sp=${encodeURIComponent(wordLower)}&max=1`;
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(tid);
-    if (!res.ok) return;
-    const data = await res.json();
-    if (!data || !data.length) return;
-    const top = data[0].word;
-    // Only suggest if different and score is high (> 500) and similar in length
-    const score = data[0].score || 0;
-    if (
-      top &&
-      top.toLowerCase() !== wordLower &&
-      score > 500 &&
-      Math.abs(top.length - wordLower.length) <= 3
-    ) {
-      showTypoSuggestion(word, top);
-    }
-  } catch {
-    // API failure — silently continue, no crash
-  }
 }
 
 async function addWord() {
@@ -603,6 +604,32 @@ async function addWord() {
     return;
   }
 
+  // PART 3: Pre-save typo check — show suggestion bar and await user decision.
+  addBtn.disabled    = true;
+  addBtn.textContent = "Checking…";
+
+  const suggestion = await getTypoSuggestion(word);
+
+  if (suggestion) {
+    addBtn.disabled    = false;
+    addBtn.textContent = "Add Word";
+    // Show bar; onProceed receives the word the user chose.
+    showTypoSuggestion(word, suggestion, (chosenWord) => {
+      _commitAddWord(chosenWord, def, ex);
+    });
+    return;
+  }
+
+  // No suggestion — proceed immediately.
+  _commitAddWord(word, def, ex);
+}
+
+function _commitAddWord(word, def, ex) {
+  const wordEl = document.getElementById("wordInput");
+  const defEl  = document.getElementById("defInput");
+  const exEl   = document.getElementById("exInput");
+  const addBtn = document.getElementById("addBtn");
+
   addBtn.disabled    = true;
   addBtn.textContent = "Saving…";
 
@@ -611,17 +638,11 @@ async function addWord() {
   mergeResultIntoState(localWord);
   saveLocalWords();
 
-  wordEl.value = defEl.value = exEl.value = "";
+  wordEl.value       = defEl.value = exEl.value = "";
   addBtn.disabled    = false;
   addBtn.textContent = "Add Word";
   render();
   updateStats();
-
-  // PART 3: Check typo after save (non-blocking, debounced)
-  clearTimeout(_typoSuggestTimeout);
-  _typoSuggestTimeout = setTimeout(() => {
-    checkTypoSuggestion(word);
-  }, 300);
 
   if (!state.isOfflineMode) {
     _pushWordToServer(localWord, word, def, ex);
