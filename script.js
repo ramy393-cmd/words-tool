@@ -651,13 +651,19 @@ function closeMergeModal() {
 }
 
 function openEditModal(wordId, entryId) {
-  const word  = state.words.find(w => String(w.id) === String(wordId));
-  const entry = word?.entries.find(e => String(e.id) === String(entryId));
-  if (!word || !entry) { dbg("openEditModal: word/entry not found", wordId, entryId); return; }
+  const word = state.words.find(w => String(w.id) === String(wordId));
+  if (!word) { dbg("openEditModal: word not found", wordId); return; }
   document.getElementById("editWordId").value  = wordId;
   document.getElementById("editEntryId").value = entryId;
-  document.getElementById("editDef").value     = entry.def;
-  document.getElementById("editEx").value      = entry.ex || "";
+  if (entryId === "new") {
+    document.getElementById("editDef").value = "";
+    document.getElementById("editEx").value  = "";
+  } else {
+    const entry = word.entries.find(e => String(e.id) === String(entryId));
+    if (!entry) { dbg("openEditModal: entry not found", wordId, entryId); return; }
+    document.getElementById("editDef").value = entry.def;
+    document.getElementById("editEx").value  = entry.ex || "";
+  }
   document.getElementById("editModal").classList.add("open");
 }
 
@@ -677,6 +683,58 @@ async function saveEdit() {
   saveBtn.textContent = "Saving…";
 
   const stateWord = state.words.find(w => String(w.id) === String(wordId));
+
+  if (entryId === "new") {
+    // Incomplete word: create its first definition entry
+    if (stateWord && hasDuplicateDef(stateWord.entries, def)) {
+      toast("This definition already exists for this word.", "warning");
+      saveBtn.disabled    = false;
+      saveBtn.textContent = "Save Changes";
+      return;
+    }
+    const newEntryId = wordId + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
+    const newEntry   = { id: newEntryId, def, ex };
+    if (stateWord) {
+      stateWord.entries     = [...(stateWord.entries || []), newEntry];
+      stateWord._incomplete = false;
+    }
+    const localWordNew = state.localWords.find(w => String(w.id) === String(wordId));
+    if (localWordNew) {
+      localWordNew.entries     = [...(localWordNew.entries || []), newEntry];
+      localWordNew._incomplete = false;
+      localWordNew._local      = true;
+    } else if (stateWord) {
+      mergeIntoLocalWords({ ...stateWord, _local: true });
+    }
+    saveLocalWords();
+    closeEditModal();
+    render();
+    updateStats();
+    if (!state.isOfflineMode) {
+      try {
+        const result = await api("ADD", { displayWord: stateWord ? stateWord.displayWord : wordId, def, ex });
+        if (result && result.id) {
+          const idx  = state.words.findIndex(w => String(w.id) === String(wordId));
+          if (idx  >= 0) state.words[idx]      = { ...result };
+          const lidx = state.localWords.findIndex(w => String(w.id) === String(wordId));
+          if (lidx >= 0) state.localWords[lidx] = { ...result, _local: false };
+          saveLocalWords();
+          render();
+          updateStats();
+        }
+        toast("Definition added!", "success");
+      } catch (err) {
+        console.error("Add first entry failed:", err);
+        toast("Saved locally. Will sync when online.", "warning");
+      }
+    } else {
+      toast("Saved locally. Will sync when online.", "warning");
+    }
+    saveBtn.disabled    = false;
+    saveBtn.textContent = "Save Changes";
+    return;
+  }
+
   if (stateWord) {
     const otherEntries = stateWord.entries.filter(e => String(e.id) !== String(entryId));
     if (hasDuplicateDef(otherEntries, def)) {
@@ -962,7 +1020,7 @@ function toggleShowMoreDefs(wordId) {
 function buildDefCellHtml(w, q) {
   const isIncomplete = !Array.isArray(w.entries) || w.entries.length === 0;
   const allEntries = isIncomplete
-    ? [{ id: w.id + "-0", def: w.def || "", ex: w.ex || "", _synthetic: true }]
+    ? [{ id: "new", def: w.def || "", ex: w.ex || "" }]
     : w.entries;
 
   const expanded = !!state.expandedDefs[String(w.id)];
@@ -982,7 +1040,6 @@ function buildDefCellHtml(w, q) {
            <button class="read-more-btn" onclick="toggleReadMore(this)">Read more ▼</button>
          </div>`
       : "";
-    const actionBtns = e._synthetic ? "" : `<button class="btn btn-icon edit entry-edit-btn" onclick="openEditModal('${escAttr(String(w.id))}','${escAttr(String(e.id))}')" title="Edit this definition">✏️</button><button class="btn btn-icon delete entry-edit-btn" onclick="event.stopPropagation();deleteEntry('${escAttr(String(w.id))}','${escAttr(String(e.id))}')" title="Delete this definition">🗑</button>`;
     return `
     <div class="entry-block">
       ${labelHtml}
@@ -991,7 +1048,12 @@ function buildDefCellHtml(w, q) {
           <div class="entry-def clamp-text">${highlight(e.def, q)}</div>
           <button class="read-more-btn" onclick="toggleReadMore(this)">Read more ▼</button>
         </div>
-        ${actionBtns}
+        <button class="btn btn-icon edit entry-edit-btn"
+          onclick="openEditModal('${escAttr(String(w.id))}','${escAttr(String(e.id))}')"
+          title="Edit this definition">✏️</button>
+        <button class="btn btn-icon delete entry-edit-btn"
+          onclick="event.stopPropagation();deleteEntry('${escAttr(String(w.id))}','${escAttr(String(e.id))}')"
+          title="Delete this definition">🗑</button>
       </div>
       ${exHtml}
     </div>`;
@@ -1018,6 +1080,7 @@ function buildTableRow(w, q) {
       </td>
       <td class="def-cell">${buildDefCellHtml(w, q)}</td>
       <td class="actions-cell">
+        ${(!Array.isArray(w.entries) || w.entries.length === 0) ? `<button class="btn btn-icon edit" onclick="openEditModal('${escAttr(String(w.id))}','new')" title="Add definition">✏️</button>` : ""}
         <button class="btn btn-icon speak" onclick="speak('${escAttr(w.displayWord)}')" title="Pronounce">🔊</button>
         <button class="btn btn-icon delete" onclick="deleteWord('${escAttr(String(w.id))}')" title="Delete word">🗑</button>
       </td>
@@ -1025,7 +1088,8 @@ function buildTableRow(w, q) {
 }
 
 function buildCardHtml(w, q) {
-  const entriesHtml = w.entries.map((e, i) => {
+  const isIncomplete = !Array.isArray(w.entries) || w.entries.length === 0;
+  let entriesHtml = w.entries.map((e, i) => {
     const defKey = `${w.id}-${e.id}-card-def`;
     const exKey  = `${w.id}-${e.id}-card-ex`;
     return `
@@ -1048,6 +1112,9 @@ function buildCardHtml(w, q) {
         </div>
       </div>`;
   }).join('<div class="entry-divider"></div>');
+  if (isIncomplete) {
+    entriesHtml = `<div class="card-entry"><div class="card-entry-row"><div class="card-entry-content"></div><button class="btn btn-icon edit card-entry-edit-btn" onclick="openEditModal('${escAttr(String(w.id))}','new')" title="Add definition">✏️</button></div></div>`;
+  }
 
   return `
     <div class="vocab-card" data-word-id="${escAttr(String(w.id))}">
