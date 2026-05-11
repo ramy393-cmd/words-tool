@@ -619,7 +619,7 @@ async function addWord() {
   const existing   = state.words.find(w => normalizeWord(w.displayWord) === normalized);
 
   if (existing) {
-    if (hasDuplicateDef(existing.entries, def)) {
+    if (def && hasDuplicateDef(existing.entries, def)) {
       toast("This definition already exists for this word.", "warning");
       return;
     }
@@ -735,7 +735,7 @@ async function confirmMerge() {
          normalizeWord(w.displayWord) === normalizeWord(existingWord.displayWord)
   );
   const checkWord = currentWord || existingWord;
-  if (hasDuplicateDef(checkWord.entries, def)) {
+  if (def && hasDuplicateDef(checkWord.entries, def)) {
     toast("This definition already exists for this word.", "warning");
     return;
   }
@@ -846,8 +846,6 @@ async function saveEdit() {
   const entryId = document.getElementById("editEntryId").value;
   const def     = document.getElementById("editDef").value.trim();
   const ex      = document.getElementById("editEx").value.trim();
-  if (!def) { toast("Definition cannot be empty.", "warning"); return; }
-
   const saveBtn = document.getElementById("editSaveBtn");
   saveBtn.disabled    = true;
   saveBtn.textContent = "Saving…";
@@ -855,6 +853,14 @@ async function saveEdit() {
   const stateWord = state.words.find(w => String(w.id) === String(wordId));
 
   if (String(entryId) === "new") {
+    // For a new entry, allow saving with no def (example-only stays incomplete).
+    // Only skip saving entirely if both def and ex are empty.
+    if (!def && !ex) {
+      toast("Please enter at least a definition or an example.", "warning");
+      saveBtn.disabled    = false;
+      saveBtn.textContent = "Save Changes";
+      return;
+    }
     // Incomplete word: create its first definition entry
     if (stateWord && hasDuplicateDef(stateWord.entries, def)) {
       toast("This definition already exists for this word.", "warning");
@@ -864,14 +870,15 @@ async function saveEdit() {
     }
     const newEntryId = wordId + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
     const newEntry   = { id: newEntryId, def, ex };
+    const entryHasDef = !!def;
     if (stateWord) {
       stateWord.entries     = [...(stateWord.entries || []), newEntry];
-      stateWord._incomplete = false;
+      stateWord._incomplete = !entryHasDef;
     }
     const localWordNew = state.localWords.find(w => String(w.id) === String(wordId));
     if (localWordNew) {
       localWordNew.entries     = [...(localWordNew.entries || []), newEntry];
-      localWordNew._incomplete = false;
+      localWordNew._incomplete = !entryHasDef;
       localWordNew._local      = true;
     } else if (stateWord) {
       mergeIntoLocalWords({ ...stateWord, _local: true });
@@ -905,7 +912,9 @@ async function saveEdit() {
     return;
   }
 
-  // Editing existing entry
+  // Editing existing entry — definition is required
+  if (!def) { toast("Definition cannot be empty.", "warning"); saveBtn.disabled = false; saveBtn.textContent = "Save Changes"; return; }
+
   if (stateWord) {
     const otherEntries = stateWord.entries.filter(e => String(e.id) !== String(entryId));
     if (hasDuplicateDef(otherEntries, def)) {
@@ -1204,10 +1213,10 @@ function getFilteredWords() {
     });
   }
   if (state.filter === "complete") {
-    words = words.filter(w => (w.entries || []).length > 0);
+    words = words.filter(w => (w.entries || []).some(e => e.def && e.def.trim()));
   }
   if (state.filter === "incomplete") {
-    words = words.filter(w => (w.entries || []).length === 0);
+    words = words.filter(w => !(w.entries || []).some(e => e.def && e.def.trim()));
   }
   if (state.sort === "oldest") {
     words = words.slice().sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
@@ -1294,7 +1303,7 @@ function toggleShowMoreDefs(wordId) {
 
 // ── PART 1: buildDefCellHtml — stable IDs, no index reliance ──
 function buildDefCellHtml(w, q) {
-  const isIncomplete = !Array.isArray(w.entries) || w.entries.length === 0;
+  const isIncomplete = !Array.isArray(w.entries) || !w.entries.some(e => e.def && e.def.trim());
 
   if (isIncomplete) {
     // Incomplete word: show only the add-definition button
@@ -1357,7 +1366,7 @@ function buildDefCellHtml(w, q) {
 
 // ── PART 1: buildTableRow — stable IDs, rename button ────────
 function buildTableRow(w, q) {
-  const isIncomplete = !Array.isArray(w.entries) || w.entries.length === 0;
+  const isIncomplete = !Array.isArray(w.entries) || !w.entries.some(e => e.def && e.def.trim());
   return `
     <tr data-word-id="${escAttr(String(w.id))}">
       <td class="word-cell">
@@ -1380,7 +1389,7 @@ function buildTableRow(w, q) {
 
 // ── PART 1: buildCardHtml — stable IDs, rename button ─────────
 function buildCardHtml(w, q) {
-  const isIncomplete = !Array.isArray(w.entries) || w.entries.length === 0;
+  const isIncomplete = !Array.isArray(w.entries) || !w.entries.some(e => e.def && e.def.trim());
 
   let entriesHtml;
   if (isIncomplete) {
