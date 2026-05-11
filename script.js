@@ -993,59 +993,63 @@ async function updateWord(displayWord, def, ex) {
 }
 
 async function deleteWord(id) {
-  if (!confirm("Delete this word and all its definitions?")) return;
+  openDeleteModal("Delete this word and all its definitions?", async () => {
+    closeDeleteModal();
 
-  state.words      = state.words.filter(w => String(w.id) !== String(id));
-  state.localWords = state.localWords.filter(w => String(w.id) !== String(id));
-  saveLocalWords();
-  if (state.editWordId === id) cancelEdit();
-  render();
-  updateStats();
-  toast("Word deleted.", "info");
+    state.words      = state.words.filter(w => String(w.id) !== String(id));
+    state.localWords = state.localWords.filter(w => String(w.id) !== String(id));
+    saveLocalWords();
+    if (state.editWordId === id) cancelEdit();
+    render();
+    updateStats();
+    toast("Word deleted.", "info");
 
-  if (!state.isOfflineMode) {
-    try {
-      await api("DELETE", { id: String(id) });
-    } catch (err) {
-      console.error("Server delete failed (removed locally only):", err);
+    if (!state.isOfflineMode) {
+      try {
+        await api("DELETE", { id: String(id) });
+      } catch (err) {
+        console.error("Server delete failed (removed locally only):", err);
+      }
     }
-  }
+  });
 }
 
 async function deleteEntry(wordId, entryId) {
-  if (!confirm("Delete this definition?")) return;
+  openDeleteModal("Delete this definition?", async () => {
+    closeDeleteModal();
 
-  const word = state.words.find(w => String(w.id) === String(wordId));
-  if (!word) return;
+    const word = state.words.find(w => String(w.id) === String(wordId));
+    if (!word) return;
 
-  const entries = Array.isArray(word.entries) ? word.entries : [];
-  word.entries = entries.filter(e => String(e.id) !== String(entryId));
+    const entries = Array.isArray(word.entries) ? word.entries : [];
+    word.entries = entries.filter(e => String(e.id) !== String(entryId));
 
-  if (word.entries.length === 0) {
-    word._incomplete = true;
-  }
-
-  const localWord = state.localWords.find(w => String(w.id) === String(wordId));
-  if (localWord) {
-    localWord.entries = [...word.entries];
-    localWord._incomplete = word.entries.length === 0;
-  }
-
-  saveLocalWords();
-  render();
-  updateStats();
-  toast("Definition deleted.", "info");
-
-  if (!state.isOfflineMode) {
-    try {
-      await api("DELETE_ENTRY", {
-        wordId: String(wordId),
-        entryId: String(entryId)
-      });
-    } catch (err) {
-      console.error("DELETE_ENTRY failed:", err);
+    if (word.entries.length === 0) {
+      word._incomplete = true;
     }
-  }
+
+    const localWord = state.localWords.find(w => String(w.id) === String(wordId));
+    if (localWord) {
+      localWord.entries = [...word.entries];
+      localWord._incomplete = word.entries.length === 0;
+    }
+
+    saveLocalWords();
+    render();
+    updateStats();
+    toast("Definition deleted.", "info");
+
+    if (!state.isOfflineMode) {
+      try {
+        await api("DELETE_ENTRY", {
+          wordId:  String(wordId),
+          entryId: String(entryId),
+        });
+      } catch (err) {
+        console.error("DELETE_ENTRY failed:", err);
+      }
+    }
+  });
 }
 
 // ── PART 2: Edit Word (rename) ────────────────────────────────
@@ -1646,6 +1650,20 @@ function escAttr(str) {
   return String(str).replace(/'/g, "\\'").replace(/"/g, "&quot;");
 }
 
+// ── Delete Confirm Modal ────────────────────────────────────────
+let _deleteCallback = null;
+
+function openDeleteModal(message, onConfirm) {
+  _deleteCallback = onConfirm;
+  document.getElementById("deleteModalMsg").textContent = message;
+  document.getElementById("deleteModal").classList.add("open");
+}
+
+function closeDeleteModal() {
+  document.getElementById("deleteModal").classList.remove("open");
+  _deleteCallback = null;
+}
+
 // ── Expose globals ─────────────────────────────────────────────
 window.cancelEdit            = cancelEdit;
 window.startEdit             = startEdit;
@@ -1745,6 +1763,19 @@ if ("serviceWorker" in navigator && (location.protocol === "http:" || location.p
 } else {
   dbg("Service worker skipped (file:// or unsupported)");
 }
+
+document.getElementById("deleteCancelBtn").addEventListener("click", closeDeleteModal);
+document.getElementById("deleteConfirmBtn").addEventListener("click", () => {
+  if (_deleteCallback) _deleteCallback();
+});
+document.getElementById("deleteModal").addEventListener("click", function(e) {
+  if (e.target === this) closeDeleteModal();
+});
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Escape" && document.getElementById("deleteModal").classList.contains("open")) {
+    closeDeleteModal();
+  }
+});
 
 setView(state.view);
 showLoadingState();
