@@ -68,13 +68,18 @@ function hasDuplicateDef(entries, def) {
 }
 
 function deduplicateEntries(entries) {
-  const seen = new Set();
-  return entries.filter(e => {
+  const seen = new Map();
+  entries.forEach(e => {
     const key = normalizeDef(e.def);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+    if (!seen.has(key)) {
+      seen.set(key, e);
+    } else {
+      // Prefer the entry that has an example over one that does not
+      const prev = seen.get(key);
+      if (!prev.ex && e.ex) seen.set(key, e);
+    }
   });
+  return Array.from(seen.values());
 }
 
 function saveLocalWords() {
@@ -96,9 +101,11 @@ function mergeIntoLocalWords(word) {
 function buildLocalWord(displayWord, def, ex) {
   const id      = "local_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
   const entryId = id + "_e0";
-  const entries = (def && def.trim())
-    ? [{ id: entryId, def: def.trim(), ex: (ex || "").trim() }]
-    : [];
+  const defVal  = (def || "").trim();
+  const exVal   = (ex  || "").trim();
+  // Always create one entry object so examples are preserved and the sheet
+  // never receives an empty entries array. _incomplete is def-based only.
+  const entries = [{ id: entryId, def: defVal, ex: exVal }];
 
   return {
     id,
@@ -107,7 +114,7 @@ function buildLocalWord(displayWord, def, ex) {
     entries,
     createdAt: new Date().toISOString(),
     _local: true,
-    _incomplete: entries.length === 0,
+    _incomplete: !defVal,
   };
 }
 
@@ -381,12 +388,14 @@ async function syncLocalToServer() {
       continue;
     }
 
+    // Legacy path: entries:[] words saved before the buildLocalWord fix.
+    // Send with empty def/ex — server will store it as incomplete.
     if (entries.length === 0) {
       try {
         const result = await api("ADD", {
           displayWord: localWord.displayWord,
           def: "",
-          ex: "",
+          ex:  localWord._savedEx || "",
         });
 
         serverResult = result;
@@ -862,7 +871,7 @@ async function saveEdit() {
       return;
     }
     // Incomplete word: create its first definition entry
-    if (stateWord && hasDuplicateDef(stateWord.entries, def)) {
+    if (def && stateWord && hasDuplicateDef(stateWord.entries, def)) {
       toast("This definition already exists for this word.", "warning");
       saveBtn.disabled    = false;
       saveBtn.textContent = "Save Changes";
@@ -1065,14 +1074,13 @@ async function deleteEntry(wordId, entryId) {
     const entries = Array.isArray(word.entries) ? word.entries : [];
     word.entries = entries.filter(e => String(e.id) !== String(entryId));
 
-    if (word.entries.length === 0) {
-      word._incomplete = true;
-    }
+    const hasDef = word.entries.some(e => e.def && e.def.trim());
+    word._incomplete = !hasDef;
 
     const localWord = state.localWords.find(w => String(w.id) === String(wordId));
     if (localWord) {
       localWord.entries = [...word.entries];
-      localWord._incomplete = word.entries.length === 0;
+      localWord._incomplete = !hasDef;
     }
 
     saveLocalWords();
@@ -1306,14 +1314,22 @@ function buildDefCellHtml(w, q) {
   const isIncomplete = !Array.isArray(w.entries) || !w.entries.some(e => e.def && e.def.trim());
 
   if (isIncomplete) {
-    // Incomplete word: show only the add-definition button
+    // Find the first entry that might have an example even without a def
+    const incompleteEntry = Array.isArray(w.entries) ? w.entries[0] : null;
+    const exHtml = (incompleteEntry && incompleteEntry.ex && incompleteEntry.ex.trim())
+      ? `<div class="clamp-cell" data-clamp-key="${escAttr(w.id + "-inc-ex")}">
+           <div class="entry-ex clamp-text">${highlight(incompleteEntry.ex, q)}</div>
+           <button class="read-more-btn" onclick="toggleReadMore(this)">Read more ▼</button>
+         </div>`
+      : "";
     return `<div class="entry-block incomplete-entry">
       <div class="entry-actions-row">
         <span class="incomplete-hint">No definition yet</span>
         <button class="btn btn-icon edit entry-edit-btn"
-          onclick="openEditModal('${escAttr(String(w.id))}','new')"
-          title="Add first definition">✏️</button>
+          onclick="openEditModal('${escAttr(String(w.id))}','${incompleteEntry ? escAttr(String(incompleteEntry.id)) : 'new'}')"
+          title="Add definition">✏️</button>
       </div>
+      ${exHtml}
     </div>`;
   }
 
@@ -1393,14 +1409,22 @@ function buildCardHtml(w, q) {
 
   let entriesHtml;
   if (isIncomplete) {
+    const incompleteEntry = Array.isArray(w.entries) ? w.entries[0] : null;
+    const exHtml = (incompleteEntry && incompleteEntry.ex && incompleteEntry.ex.trim())
+      ? `<div class="clamp-cell" data-clamp-key="${escAttr(w.id + "-inc-card-ex")}">
+           <div class="entry-ex clamp-text">${highlight(incompleteEntry.ex, q)}</div>
+           <button class="read-more-btn" onclick="toggleReadMore(this)">Read more ▼</button>
+         </div>`
+      : "";
     entriesHtml = `<div class="card-entry">
       <div class="card-entry-row">
         <div class="card-entry-content">
           <span class="incomplete-hint">No definition yet</span>
+          ${exHtml}
         </div>
         <button class="btn btn-icon edit card-entry-edit-btn"
-          onclick="openEditModal('${escAttr(String(w.id))}','new')"
-          title="Add first definition">✏️</button>
+          onclick="openEditModal('${escAttr(String(w.id))}','${incompleteEntry ? escAttr(String(incompleteEntry.id)) : 'new'}')"
+          title="Add definition">✏️</button>
       </div>
     </div>`;
   } else {
