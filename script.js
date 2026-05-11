@@ -54,6 +54,8 @@ let state = {
 
 let _syncInProgress = false;
 
+try { localStorage.removeItem("wordsData"); } catch {}
+
 if (ENV.isFile) dbg("Running in offline mode (file://)");
 
 function normalizeDef(def) {
@@ -114,7 +116,8 @@ function addLocalDefinition(existingWord, def, ex) {
   if (!word) return;
   if (hasDuplicateDef(word.entries, def)) return;
   const entryId = word.id + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
-  word.entries.push({ id: entryId, def, ex: ex || "" });
+  const isServerWord = !String(word.id).startsWith("local_");
+  word.entries.push({ id: entryId, def, ex: ex || "", ...(isServerWord ? { _pendingAdd: true } : {}) });
   word._local = true;
   saveLocalWords();
 }
@@ -405,13 +408,33 @@ async function syncLocalToServer() {
       continue;
     }
 
+    const isNewWord = String(localWord.id).startsWith("local_");
+
     for (const entry of entries) {
       try {
-        const result = await api("ADD", {
-          displayWord: localWord.displayWord,
-          def: entry.def,
-          ex:  entry.ex || "",
-        });
+        let result;
+        if (isNewWord) {
+          result = await api("ADD", {
+            displayWord: localWord.displayWord,
+            def: entry.def,
+            ex:  entry.ex || "",
+          });
+        } else {
+          if (entry._pendingAdd) {
+            result = await api("ADD", {
+              displayWord: localWord.displayWord,
+              def: entry.def,
+              ex:  entry.ex || "",
+            });
+          } else {
+            result = await api("UPDATE", {
+              id:      String(localWord.id),
+              entryId: String(entry.id),
+              def:     entry.def,
+              ex:      entry.ex || "",
+            });
+          }
+        }
         serverResult = result;
         mergeResultIntoState(result);
         syncedCount++;
@@ -723,7 +746,8 @@ async function confirmMerge() {
 
   const baseId     = (existingWord.id || "e") + "";
   const newEntryId = baseId + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
-  const newEntry   = { id: newEntryId, def, ex: ex || "" };
+  const isServerWord = !String(baseId).startsWith("local_");
+  const newEntry   = { id: newEntryId, def, ex: ex || "", ...(isServerWord ? { _pendingAdd: true } : {}) };
 
   const stateWord = state.words.find(
     w => String(w.id) === String(existingWord.id) ||
@@ -993,6 +1017,10 @@ async function updateWord(displayWord, def, ex) {
 }
 
 async function deleteWord(id) {
+  if (state.isOfflineMode) {
+    toast("Internet connection required to delete.", "warning");
+    return;
+  }
   openDeleteModal("Delete this word and all its definitions?", async () => {
     closeDeleteModal();
 
@@ -1015,6 +1043,10 @@ async function deleteWord(id) {
 }
 
 async function deleteEntry(wordId, entryId) {
+  if (state.isOfflineMode) {
+    toast("Internet connection required to delete.", "warning");
+    return;
+  }
   openDeleteModal("Delete this definition?", async () => {
     closeDeleteModal();
 
@@ -1778,5 +1810,11 @@ document.addEventListener("keydown", function(e) {
 });
 
 setView(state.view);
-showLoadingState();
+if (state.localWords.length > 0) {
+  state.words = buildDeduplicatedWords(state.localWords);
+  render();
+  updateStats();
+} else {
+  showLoadingState();
+}
 updateOnlineStatus().then(() => fetchWords());
