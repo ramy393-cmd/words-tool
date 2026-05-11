@@ -70,7 +70,7 @@ function hasDuplicateDef(entries, def) {
 function deduplicateEntries(entries) {
   const seen = new Map();
   entries.forEach(e => {
-    const key = normalizeDef(e.def);
+    const key = normalizeDef(e.def) || ("__ex_only__" + (e.id || Math.random()));
     if (!seen.has(key)) {
       seen.set(key, e);
     } else {
@@ -121,7 +121,7 @@ function buildLocalWord(displayWord, def, ex) {
 function addLocalDefinition(existingWord, def, ex) {
   const word = state.localWords.find(w => w.id === existingWord.id);
   if (!word) return;
-  if (hasDuplicateDef(word.entries, def)) return;
+  if (def && hasDuplicateDef(word.entries, def)) return;
   const entryId = word.id + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
   const isServerWord = !String(word.id).startsWith("local_");
   word.entries.push({ id: entryId, def, ex: ex || "", ...(isServerWord ? { _pendingAdd: true } : {}) });
@@ -309,7 +309,11 @@ function buildDeduplicatedWords(data) {
       const incomingEntries = Array.isArray(w.entries) ? w.entries : [];
       const merged = [...existing.entries];
       incomingEntries.forEach(e => {
-        if (!hasDuplicateDef(merged, e.def)) {
+        const defKey = normalizeDef(e.def);
+        const isDup = defKey !== ""
+          ? hasDuplicateDef(merged, e.def)
+          : merged.some(m => normalizeDef(m.def) === "" && m.id === e.id);
+        if (!isDup) {
           merged.push(e);
         }
       });
