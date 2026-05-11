@@ -156,8 +156,8 @@ body {
 
 /* ── Input Panel ───────────────────────────────────────────── */
 .input-panel {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
   border-radius: var(--radius-lg);
   padding: 20px;
   margin-bottom: 24px;
@@ -165,10 +165,10 @@ body {
 
 .input-panel-title {
   font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--text-3);
+  font-size: 0.72rem;
+  color: var(--text-2);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   margin-bottom: 16px;
 }
 
@@ -187,17 +187,18 @@ body {
 }
 
 .input-group label {
-  font-size: 0.72rem;
-  color: var(--text-3);
+  font-size: 0.73rem;
+  color: #9e9a92;
   font-family: var(--font-mono);
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.09em;
 }
 
 .input-group input,
 .input-group textarea {
-  background: var(--bg-3);
-  border: 1px solid var(--border);
+  background: var(--bg-4);
+  border: 1px solid rgba(255,255,255,0.09);
   border-radius: var(--radius);
   padding: 10px 14px;
   color: var(--text-1);
@@ -207,16 +208,31 @@ body {
   outline: none;
   resize: none;
   width: 100%;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.35);
 }
 
 .input-group input:focus,
 .input-group textarea:focus {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px var(--gold-dim);
+  border-color: rgba(201,168,76,0.7);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.35),
+              0 0 0 2px rgba(201,168,76,0.14);
 }
 
 .input-group input::placeholder,
-.input-group textarea::placeholder { color: var(--text-3); }
+.input-group textarea::placeholder {
+  color: var(--text-3);
+  opacity: 0.7;
+}
+
+/* Word field — primary anchor */
+#wordInput {
+  border-color: rgba(255,255,255,0.13);
+  font-weight: 500;
+}
+
+.input-group:has(#wordInput) label {
+  color: #b8b3a8;
+}
 
 .input-actions {
   display: flex;
@@ -1023,39 +1039,5 @@ mark {
   }
   .vocab-card .card-word {
     cursor: pointer;
-  }
-}
-
-/* ── Delete Confirm Modal ──────────────────────────────────────── */
-.delete-modal {
-  max-width: 380px;
-}
-.delete-modal .modal-title {
-  color: var(--text-1);
-}
-.btn-delete {
-  background: transparent;
-  color: var(--gold);
-  border: 1px solid rgba(201,168,76,0.35);
-  border-radius: var(--radius);
-  padding: 8px 18px;
-  font-size: 0.88rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-.btn-delete:hover {
-  background: rgba(201,168,76,0.12);
-  border-color: var(--gold);
-  color: var(--gold-light);
-}
-@media (max-width: 700px) {
-  .delete-modal {
-    max-width: 100%;
-  }
-  .delete-modal .modal-actions {
-    flex-direction: row;
-    justify-content: flex-end;
   }
 }
