@@ -1,7 +1,7 @@
 // service-worker.js — MBA Vocabulary PWA
 // Strategy: stale-while-revalidate for pages, network-first for API
 
-const CACHE_VERSION = "v1.0.3"; // bump this on every deploy
+const CACHE_VERSION = "v1.0.4"; // bump this on every deploy
 const STATIC_CACHE  = `vocab-static-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   "./index.html",
