@@ -31,11 +31,13 @@ function doGet(e) {
       const existing = data.find(w => w.word === word);
 
       if (existing) {
-        const exists = def
+        // For non-empty def: skip if same def already exists.
+        // For example-only (def === ""): deduplicate by ex text.
+        const isDuplicate = def
           ? existing.entries.some(e => normalize(e.def) === normalize(def))
-          : false;
+          : existing.entries.some(e => e.def === "" && e.ex === ex);
 
-        if (def && !exists) {
+        if (!isDuplicate) {
           existing.entries.push({
             id: Date.now().toString() + "_" + Math.random().toString(36).slice(2),
             def,
@@ -47,15 +49,18 @@ function doGet(e) {
         result = existing;
 
       } else {
+        // Create entry for any combination: def-only, def+ex, example-only.
+        // Only skip entry creation if both def and ex are truly empty.
+        const firstEntry = {
+          id: Date.now().toString() + "_" + Math.random().toString(36).slice(2),
+          def,
+          ex
+        };
         const newWord = {
           id: Date.now().toString(),
           word,
           displayWord,
-          entries: def ? [{
-            id: Date.now().toString() + "_" + Math.random().toString(36).slice(2),
-            def,
-            ex
-          }] : [],
+          entries: (def || ex) ? [firstEntry] : [],
           createdAt: new Date().toISOString()
         };
 
@@ -79,7 +84,7 @@ function doGet(e) {
       const ex      = (payload.ex  || "").trim();
 
       if (!wordId || !entryId) throw new Error("Missing id or entryId");
-      if (!def)                throw new Error("Definition cannot be empty");
+      // Allow empty def for example-only entries — do NOT gate on def here.
 
       const data     = getAllWords(sheet);
       const existing = data.find(w => String(w.id) === wordId);
