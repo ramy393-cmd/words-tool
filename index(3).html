@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="MBA & Business English vocabulary builder">
+  <meta name="theme-color" content="#0a0a0f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Vocabulary</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./style.css">
+
+  <script>
+    window.APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzcrin0ZHvK54sZsVRrIiEekD_ViTYobuehGmdqQkX8u6qdAWDhGm09A0D7QCI9NdYY/exec";
+  </script>
+
+  <style>
+    /* ══════════════════════════════════════════════════
+       DENSITY REFINEMENT — table rows
+       Base: td padding 12px 16px
+       ══════════════════════════════════════════════════ */
+    .vocab-table td {
+      padding-top: 9px;
+      padding-bottom: 9px;
+    }
+    /* Mobile already has its own compact padding — preserve */
+    @media (max-width: 700px) {
+      .vocab-table td { padding-top: 10px; padding-bottom: 10px; }
+    }
+
+    /* Entry blocks: base margin-bottom 12px → tighten */
+    .entry-block {
+      margin-bottom: 8px;
+    }
+
+    /* Entry divider: base margin 10px 0 → tighten */
+    .entry-divider {
+      margin: 7px 0;
+    }
+
+    /* Clamp cell spacing: base margin-bottom 6px → slight tighten */
+    .clamp-cell {
+      margin-bottom: 4px;
+    }
+    .clamp-cell + .clamp-cell { margin-top: 4px; }
+
+    /* ══════════════════════════════════════════════════
+       DENSITY REFINEMENT — cards
+       Base: vocab-card padding 18px, gap 12px
+       ══════════════════════════════════════════════════ */
+    .vocab-card {
+      padding: 14px 16px;
+      gap: 10px;
+    }
+
+    /* Card entry: base padding 10px 0 → tighten */
+    .card-entry {
+      padding-top: 7px;
+      padding-bottom: 7px;
+    }
+
+    /* Card word font: slightly tighter — preserve display font */
+    .card-word {
+      font-size: 1.08rem;
+    }
+
+    /* Card date: tighten top padding */
+    .card-date {
+      padding-top: 2px;
+    }
+
+    /* card-def-num: base margin-bottom 4px → keep */
+
+    /* ══════════════════════════════════════════════════
+       DENSITY REFINEMENT — word cell spacing
+       ══════════════════════════════════════════════════ */
+    .word-cell-actions {
+      margin-top: 4px;
+    }
+
+    /* ══════════════════════════════════════════════════
+       DENSITY REFINEMENT — entry text rhythm
+       ══════════════════════════════════════════════════ */
+    .entry-def {
+      line-height: 1.5;
+    }
+    .entry-ex {
+      line-height: 1.45;
+      margin-top: 2px;
+    }
+
+    /* ══════════════════════════════════════════════════
+       DENSITY REFINEMENT — cards grid gap
+       Base: 16px → slight tighten
+       ══════════════════════════════════════════════════ */
+    .cards-grid {
+      gap: 12px;
+    }
+
+    /* ══════════════════════════════════════════════════
+       EXISTING INLINE STYLE BLOCK BELOW (untouched)
+       ══════════════════════════════════════════════════ */
+    .actions-th-empty {
+      padding: 0;
+      width: 0;
+      min-width: 0;
+      border: none;
+      display: none;
+    }
+
+    /* ── Word-cell inline actions (table view) ─────────────────── */
+    .word-cell-top {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .word-cell-actions {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 5px;
+    }
+    /* Hide empty actions column but keep it in DOM for structure */
+    .actions-cell:empty {
+      padding: 0;
+      width: 0;
+      min-width: 0;
+      border: none;
+    }
+    th:last-child:has(+ *:empty) { display: none; }
+
+    /* ── Card header: word + word-actions side by side ──────────── */
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .card-header-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .card-word-actions {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      flex-shrink: 0;
+      padding-top: 2px;
+    }
+
+    /* ── Entry-level action rows: subtle gap refinement ────────── */
+    .entry-actions-row {
+      gap: 4px;
+    }
+    .card-entry-row {
+      gap: 4px;
+    }
+
+    /* ── Definition text: slightly more breathing room ──────────── */
+    .entry-def {
+      line-height: 1.55;
+    }
+    .entry-ex {
+      line-height: 1.5;
+      opacity: 0.78;
+    }
+
+    /* ── Mobile: stack word actions below word ──────────────────── */
+    @media (max-width: 700px) {
+      .word-cell-top {
+        flex-wrap: wrap;
+      }
+      .word-cell-actions {
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .card-word-actions {
+        gap: 4px;
+      }
+    }
+
+    /* ── Part 1+2: Icon-only action buttons — unified size ─────── */
+    .btn.btn-icon {
+      min-width: 28px;
+      min-height: 28px;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.88rem;
+      flex-shrink: 0;
+      /* Softer visual weight */
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      opacity: 0.65;
+      transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+    .btn.btn-icon:hover {
+      opacity: 1;
+      background: rgba(255,255,255,0.07);
+      border-color: rgba(255,255,255,0.22);
+    }
+    /* Mobile: keep touch targets at 32px */
+    @media (max-width: 700px) {
+      .btn.btn-icon {
+        min-width: 32px;
+        min-height: 32px;
+        width: 32px;
+        height: 32px;
+        font-size: 0.95rem;
+        opacity: 0.75;
+      }
+    }
+    .card-actions .btn.btn-icon,
+    .actions-cell .btn.btn-icon {
+      /* inherit from .btn.btn-icon */
+    }
+
+    /* ── Part 3: Incomplete word subtle visual ─────────────────── */
+    tr[data-word-id] .incomplete-badge,
+    .vocab-card .incomplete-badge {
+      background: transparent;
+      border: 1px dashed rgba(255,255,255,0.22);
+      color: rgba(255,255,255,0.45);
+      font-size: 0.72rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-style: italic;
+      letter-spacing: 0.01em;
+    }
+    /* Subtle left accent on incomplete rows/cards */
+    tr[data-word-id]:has(.incomplete-badge) {
+      border-left: 2px solid rgba(255,255,255,0.12);
+    }
+    .vocab-card:has(.incomplete-badge) {
+      border-left: 2px dashed rgba(255,255,255,0.18);
+    }
+
+    /* ── Part 4: Search clear button polish ────────────────────── */
+    #searchClearBtn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted, #888);
+      font-size: 1.15rem;
+      padding: 0 4px;
+      line-height: 1;
+      flex-shrink: 0;
+      border-radius: 50%;
+      transition: color 0.15s;
+    }
+    #searchClearBtn:hover { color: var(--text, #eee); }
+
+    /* ── Typo Suggestion Bar ────────────────────────────────── */
+    .typo-suggestion-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      background: var(--surface-2, #1a1a2e);
+      border: 1px solid var(--accent, #7c6af7);
+      border-radius: 8px;
+      padding: 10px 16px;
+      margin: 8px 0 4px;
+      font-size: 0.9rem;
+      animation: fadeIn .2s ease;
+    }
+    .typo-suggestion-bar .typo-msg { flex: 1; min-width: 160px; }
+    .typo-suggestion-bar .btn-sm { padding: 4px 12px; font-size: 0.82rem; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; } }
+
+    /* ── Rename Word Modal ─────────────────────────────────── */
+    /* Uses existing modal styles — just needs unique ID */
+
+    /* ── Incomplete hint text ──────────────────────────────── */
+    .incomplete-hint {
+      font-size: 0.82rem;
+      opacity: 0.55;
+      font-style: italic;
+    }
+
+    /* ── Rename button in actions ─────────────────────────── */
+    .btn-icon.rename {
+      font-size: 0.78rem;
+      gap: 3px;
+    }
+
+    /* ── Part 6: Mobile safety — prevent button overlap ────── */
+    @media (max-width: 700px) {
+      .actions-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-start;
+      }
+      .card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .card-actions .btn {
+        flex-shrink: 0;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-wrapper">
+
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="header-brand">
+        <h1>Vocab</h1>
+        <span class="subtitle">B English Builder</span>
+      </div>
+      <div class="header-actions">
+        <span id="queueBadge" class="queue-badge"></span>
+        <button id="syncBtn" title="Sync unsynced words to server">⟳ Sync</button>
+        <div id="statusBadge" class="status-badge online">
+          <span class="dot"></span>
+          <span class="label">Online</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- OFFLINE BANNER -->
+    <div id="offlineBanner" class="offline-banner">
+      <span>⚠️</span>
+      <span>You're offline. New words will be queued and synced when connection is restored.</span>
+    </div>
+
+    <!-- INPUT PANEL -->
+    <section class="input-panel">
+      <div class="input-panel-title">Add New Word</div>
+      <div class="input-grid">
+        <div class="input-group">
+          <label for="wordInput">Word / Phrase</label>
+          <input
+            id="wordInput"
+            type="text"
+            placeholder="Enter word or phrase"
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </div>
+        <div class="input-group">
+          <label for="defInput">Definition (optional)</label>
+          <input
+            id="defInput"
+            type="text"
+            placeholder="Enter definition"
+            autocomplete="off"
+          >
+        </div>
+        <div class="input-group full">
+          <label for="exInput">Example (Business context)</label>
+          <input
+            id="exInput"
+            type="text"
+            placeholder="Enter example sentence"
+            autocomplete="off"
+          >
+        </div>
+      </div>
+      <div class="input-actions">
+        <button id="addBtn" class="btn btn-primary">Add Word</button>
+        <button id="generatePromptBtn" class="btn btn-ghost" title="Copy a ChatGPT prompt for this word">✨ Generate Prompt</button>
+      </div>
+    </section>
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input id="searchInput" type="search" placeholder="Search words, definitions…">
+        <button id="searchClearBtn" title="Clear search" style="display:none;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--text-muted,#888);font-size:1.1rem;padding:0 6px;line-height:1;flex-shrink:0;" onclick="(function(){document.getElementById('searchInput').value='';window.__vcabClearSearch&&window.__vcabClearSearch();})()">×</button>
+      </div>
+
+      <select id="sortSelect" class="sort-select">
+        <option value="newest">Newest First</option>
+        <option value="oldest">Oldest First</option>
+        <option value="az">A → Z</option>
+      </select>
+
+      <select id="filterSelect" class="sort-select">
+        <option value="all">All</option>
+        <option value="complete">Complete</option>
+        <option value="incomplete">Incomplete</option>
+      </select>
+
+      <div class="view-toggle">
+        <button class="vbtn" data-view="table" title="Table view">⊞ Table</button>
+        <button class="vbtn active" data-view="cards" title="Card view">▦ Cards</button>
+      </div>
+
+      <div class="csv-actions">
+        <button id="exportBtn" class="btn btn-ghost" title="Export CSV">⬇ CSV</button>
+        <button id="importBtn" class="btn btn-ghost" title="Import CSV">⬆ Import</button>
+        <input id="csvFileInput" type="file" accept=".csv" style="display:none">
+      </div>
+    </div>
+
+    <!-- STATS BAR -->
+    <div class="stats-bar">
+      <div class="stat">Words: <span id="statWords">0</span></div>
+      <div class="stat">·</div>
+      <div class="stat">Definitions: <span id="statDefs">0</span></div>
+      <div class="stat">·</div>
+      <div class="stat">Showing: <span id="statShown">0</span></div>
+    </div>
+
+    <!-- TABLE VIEW -->
+    <div id="tableViewWrapper" class="table-view-wrapper hidden">
+      <div class="table-wrap">
+        <table class="vocab-table">
+          <thead>
+            <tr>
+              <th>Word</th>
+              <th>Definition &amp; Example</th>
+              <th class="actions-th-empty"></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td colspan="3"><div class="loading-state"><span class="spinner"></span> Loading…</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CARDS VIEW -->
+    <div id="cardsViewWrapper" class="cards-view-wrapper">
+      <div id="cardsGrid" class="cards-grid">
+        <div class="loading-state"><span class="spinner"></span> Loading…</div>
+      </div>
+    </div>
+
+  </div><!-- /app-wrapper -->
+
+  <!-- TOAST CONTAINER -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- EDIT MODAL -->
+  <div id="editModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+    <div class="modal">
+      <div class="modal-title" id="editModalTitle">Edit Definition</div>
+      <div class="modal-subtitle">Update the definition or example sentence below.</div>
+      <input type="hidden" id="editWordId">
+      <input type="hidden" id="editEntryId">
+      <div class="input-group" style="margin-bottom:12px">
+        <label>Definition</label>
+        <textarea id="editDef" rows="3" placeholder="Definition…"></textarea>
+      </div>
+      <div class="input-group">
+        <label>Example</label>
+        <textarea id="editEx" rows="2" placeholder="Example sentence (optional)…"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button id="editCancelBtn" class="btn btn-ghost">Cancel</button>
+        <button id="editSaveBtn" class="btn btn-primary">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RENAME WORD MODAL -->
+  <div id="renameWordModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="renameWordModalTitle">
+    <div class="modal">
+      <div class="modal-title" id="renameWordModalTitle">Rename Word</div>
+      <div class="modal-subtitle">Edit the word or phrase text. Definitions and examples are preserved.</div>
+      <input type="hidden" id="renameWordId">
+      <div class="input-group" style="margin-bottom:12px">
+        <label for="renameWordInput">Word / Phrase</label>
+        <input id="renameWordInput" type="text" placeholder="e.g. substitute" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="modal-actions">
+        <button id="renameWordCancelBtn" class="btn btn-ghost">Cancel</button>
+        <button id="renameWordSaveBtn" class="btn btn-primary">Rename</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MERGE MODAL -->
+  <div id="mergeModal" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-title">Word Already Exists</div>
+      <div class="modal-subtitle">
+        "<strong id="mergeWord"></strong>" already has
+        <strong id="mergeDefCount"></strong> definition(s).
+        Would you like to add this as a new definition?
+      </div>
+      <div class="modal-actions">
+        <button id="mergeCancelBtn" class="btn btn-ghost">Cancel</button>
+        <button id="mergeConfirmBtn" class="btn btn-primary">Add Definition</button>
+      </div>
+    </div>
+  </div>
+  <!-- DELETE CONFIRM MODAL -->
+  <div id="deleteModal" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-title">Confirm Delete</div>
+      <div class="modal-subtitle" id="deleteModalMsg"></div>
+      <div class="modal-actions">
+        <button id="deleteCancelBtn" class="btn btn-ghost">Cancel</button>
+        <button id="deleteConfirmBtn" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+<script src="./script.js"></script>
+</body>
+</html>

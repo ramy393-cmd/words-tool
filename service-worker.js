@@ -1,7 +1,7 @@
 // service-worker.js — MBA Vocabulary PWA
 // Strategy: stale-while-revalidate for pages, network-first for API
 
-const CACHE_VERSION = "v1.0.4"; // bump this on every deploy
+const CACHE_VERSION = "v1.0.5"; // bump this on every deploy
 const STATIC_CACHE  = `vocab-static-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   "./index.html",
@@ -9,6 +9,17 @@ const STATIC_ASSETS = [
   "./script.js",
   "./manifest.json"
 ];
+
+// URLs that must always bypass the service worker cache
+function isBypassUrl(url) {
+  return (
+    url.includes("script.google.com") ||
+    url.includes("googleapis.com") ||
+    url.includes("google.com/macros") ||
+    // catch redirect destinations that Apps Script resolves to
+    url.includes("script.googleusercontent.com")
+  );
+}
 
 // ── Install: pre-cache static assets ─────────────────────────
 self.addEventListener("install", event => {
@@ -36,8 +47,8 @@ self.addEventListener("activate", event => {
 self.addEventListener("fetch", event => {
   const url = event.request.url;
 
-  // Always bypass for Google Apps Script API calls
-  if (url.includes("script.google.com")) {
+  // Always bypass for API/Google calls — never cache, never intercept
+  if (isBypassUrl(url)) {
     event.respondWith(fetch(event.request));
     return;
   }

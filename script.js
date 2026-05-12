@@ -190,7 +190,10 @@ function setOfflineMode(isOffline) {
   updateSyncButton();
 }
 
-async function updateOnlineStatus() {
+let _pingInProgress = false;
+let _onlineDebounce = null;
+
+async function updateOnlineStatus(triggerSync = false) {
   if (ENV.isFile) {
     setOfflineMode(true);
     dbg("Running in offline mode");
@@ -203,25 +206,48 @@ async function updateOnlineStatus() {
     return;
   }
 
-  if (API) {
-    try {
-      const params = new URLSearchParams({ action: "PING", t: Date.now() });
-      const res = await fetch(API + "?" + params, { signal: makeAbortSignal(5000) });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      setOfflineMode(false);
-      syncLocalToServer();
-    } catch {
-      dbg("API unreachable — forcing offline mode");
-      setOfflineMode(true);
-    }
-  } else {
+  if (!API) {
     setOfflineMode(true);
     dbg("Running in offline mode (no API configured)");
+    return;
+  }
+
+  if (_pingInProgress) return;
+  _pingInProgress = true;
+
+  try {
+    const params = new URLSearchParams({ action: "PING", t: Date.now() });
+    const res = await fetch(API + "?" + params, {
+      signal: makeAbortSignal(5000),
+      redirect: "follow",
+    });
+    if (res.status >= 200 && res.status < 300) {
+      const wasOffline = state.isOfflineMode;
+      setOfflineMode(false);
+      if (triggerSync && wasOffline) {
+        syncLocalToServer();
+      }
+    } else {
+      throw new Error("HTTP " + res.status);
+    }
+  } catch {
+    dbg("API unreachable — forcing offline mode");
+    setOfflineMode(true);
+  } finally {
+    _pingInProgress = false;
   }
 }
 
-window.addEventListener("online",  () => { dbg("Browser online event"); updateOnlineStatus(); });
-window.addEventListener("offline", () => { dbg("Browser offline event"); setOfflineMode(true); });
+window.addEventListener("online", () => {
+  dbg("Browser online event");
+  clearTimeout(_onlineDebounce);
+  _onlineDebounce = setTimeout(() => updateOnlineStatus(true), 1000);
+});
+window.addEventListener("offline", () => {
+  dbg("Browser offline event");
+  clearTimeout(_onlineDebounce);
+  setOfflineMode(true);
+});
 
 function makeAbortSignal(ms) {
   try { return AbortSignal.timeout(ms); }
@@ -291,8 +317,7 @@ async function fetchWords() {
       showEmptyFallback("Failed to load. Check your connection.");
       toast("Failed to load words. Check your connection.", "error");
     }
-    state.isOfflineMode = true;
-    updateSyncButton();
+    setOfflineMode(true);
   }
 }
 
@@ -512,8 +537,13 @@ async function manualSync() {
   const syncBtn = document.getElementById("syncBtn");
   if (syncBtn) syncBtn.disabled = true;
   await syncLocalToServer();
+  // syncLocalToServer already calls fetchWords() when items were synced.
+  // Only fetch again here when there was nothing to sync (pure refresh).
   if (!state.isOfflineMode) {
-    await fetchWords();
+    const stillDirty = state.localWords.filter(w => w._local).length;
+    if (stillDirty === 0 && state.queue.length === 0) {
+      await fetchWords();
+    }
   }
 }
 
