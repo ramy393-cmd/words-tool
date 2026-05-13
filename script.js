@@ -1619,31 +1619,35 @@ function attachDesktopCardExpand() {
 }
 
 function exportCSV() {
-  if (!state.words.length) { toast("Nothing to export.", "warning"); return; }
+  const filtered = getFilteredWords();
+  if (!filtered.length) { toast("Nothing to export.", "warning"); return; }
   const rows = [["word", "definition", "example"]];
 
-  state.words.forEach(w => {
+  filtered.forEach(w => {
     const entries = Array.isArray(w.entries) ? w.entries : [];
-
     if (entries.length === 0) {
       rows.push([csvEsc(w.displayWord), "", ""]);
     } else {
       entries.forEach(e =>
-        rows.push([csvEsc(w.displayWord), csvEsc(e.def), csvEsc(e.ex || "")])
+        rows.push([csvEsc(w.displayWord), csvEsc(e.def || ""), csvEsc(e.ex || "")])
       );
     }
   });
-  const csv  = rows.map(r => r.join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.download = "mba-vocabulary.csv";
+
+  const csv      = rows.map(r => r.join(",")).join("\n");
+  const blob     = new Blob([csv], { type: "text/csv" });
+  const url      = URL.createObjectURL(blob);
+  const a        = document.createElement("a");
+  a.href         = url;
+  const suffix   = state.filter !== "all"  ? "-" + state.filter
+                 : state.search.trim()     ? "-search"
+                 : "";
+  a.download     = "mba-vocabulary" + suffix + ".csv";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  toast("CSV exported!", "success");
+  toast(`CSV exported (${filtered.length} word${filtered.length !== 1 ? "s" : ""})!`, "success");
 }
 
 function csvEsc(val) {
@@ -1668,26 +1672,54 @@ function importCSV(file) {
     for (const row of rows) {
       const [word, def, ex = ""] = row;
       const wordTrimmed = word.trim();
-      const defTrimmed  = def.trim();
-      const exTrimmed   = ex.trim();
+      const defTrimmed  = def ? def.trim() : "";
+      const exTrimmed   = ex  ? ex.trim()  : "";
       const normalized  = normalizeWord(wordTrimmed);
+
+      if (!wordTrimmed) { skipped++; continue; }
 
       const existing = state.words.find(w => normalizeWord(w.displayWord) === normalized);
 
       if (existing) {
-        if (hasDuplicateDef(existing.entries, defTrimmed)) {
-          skipped++;
-          continue;
-        }
-        const newEntryId = existing.id + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
-        const newEntry   = { id: newEntryId, def: defTrimmed, ex: exTrimmed };
-        existing.entries = [...existing.entries, newEntry];
-        const localWord  = state.localWords.find(w => String(w.id) === String(existing.id));
-        if (localWord) {
-          localWord.entries = [...localWord.entries, newEntry];
-          localWord._local  = true;
+        // Case A: incoming row fills in a definition for an existing example-only / word-only entry.
+        //         Find a matching incomplete entry (def === "") and update it in-place instead of
+        //         pushing a duplicate, but only when the incoming def is non-empty.
+        const incompleteEntry = defTrimmed
+          ? (existing.entries || []).find(e => !e.def || !e.def.trim())
+          : null;
+
+        if (incompleteEntry) {
+          // UPDATE path — fill the blank entry in-place
+          incompleteEntry.def = defTrimmed;
+          if (exTrimmed && !incompleteEntry.ex) incompleteEntry.ex = exTrimmed;
+          const localWord = state.localWords.find(w => String(w.id) === String(existing.id));
+          if (localWord) {
+            const le = (localWord.entries || []).find(e => String(e.id) === String(incompleteEntry.id));
+            if (le) { le.def = defTrimmed; if (exTrimmed && !le.ex) le.ex = exTrimmed; }
+            localWord._local = true;
+          } else {
+            mergeIntoLocalWords({ ...existing, _local: true });
+          }
         } else {
-          mergeIntoLocalWords({ ...existing, _local: true });
+          // ADD path — guard against true duplicates
+          // For non-empty def: deduplicate by normalized def text
+          // For example-only (def === ""): deduplicate by exact ex text
+          const isDuplicate = defTrimmed
+            ? hasDuplicateDef(existing.entries, defTrimmed)
+            : (existing.entries || []).some(e => !e.def && e.ex === exTrimmed);
+
+          if (isDuplicate) { skipped++; continue; }
+
+          const newEntryId = existing.id + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
+          const newEntry   = { id: newEntryId, def: defTrimmed, ex: exTrimmed };
+          existing.entries = [...existing.entries, newEntry];
+          const localWord  = state.localWords.find(w => String(w.id) === String(existing.id));
+          if (localWord) {
+            localWord.entries = [...localWord.entries, newEntry];
+            localWord._local  = true;
+          } else {
+            mergeIntoLocalWords({ ...existing, _local: true });
+          }
         }
       } else {
         const localWord = buildLocalWord(wordTrimmed, defTrimmed, exTrimmed);
