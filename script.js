@@ -40,10 +40,7 @@ let state = {
   words:        [],
   localWords:   JSON.parse(localStorage.getItem("localWords") || "[]"),
   queue:        JSON.parse(localStorage.getItem("queue") || "[]"),
-  // isOfflineMode starts as null (UNKNOWN) — never pre-decide from navigator.onLine
-  // which is unreliable at script parse time and triggers BUG 1/4.
-  // applyConnectionState() is the only writer after init.
-  isOfflineMode: ENV.isFile ? true : null,
+  isOfflineMode: ENV.isFile, // startup sequence corrects this before first render
   editMode:     false,
   editWordId:   null,
   editEntryId:  null,
@@ -155,8 +152,7 @@ function updateSyncButton() {
   if (!btn) return;
   const localUnsyncedCount = state.localWords.filter(w => w._local).length;
   const total = state.queue.length + localUnsyncedCount;
-  // state.isOfflineMode===null means UNKNOWN startup — hide sync button
-  if (total > 0 && state.isOfflineMode === false) {
+  if (total > 0 && !state.isOfflineMode) {
     btn.style.display = "inline-flex";
   } else {
     btn.style.display = "none";
@@ -176,124 +172,162 @@ function toast(msg, type = "info", duration = 3200) {
   }, duration);
 }
 
-// ── CONNECTION STATE MACHINE ───────────────────────────────────
-// Single authoritative source of truth for online/offline state.
-// Only applyConnectionState() may mutate state.isOfflineMode and touch UI.
-// Every other function reads state.isOfflineMode but never writes it directly.
-
-const CONN = Object.freeze({ UNKNOWN: "unknown", ONLINE: "online", OFFLINE: "offline", SYNCING: "syncing" });
-
-// _startupDone: blocks browser online/offline events from firing during boot
-// to prevent the flicker described in BUG 4.
-let _startupDone   = false;
-let _connState     = ENV.isFile ? CONN.OFFLINE : CONN.UNKNOWN;
-let _connLock      = false;   // mutual exclusion for ping + sync
-let _connDebounce  = null;    // debounce timer for browser events
-
-function applyConnectionState(next, { triggerSync = false } = {}) {
-  // UNKNOWN is only valid during startup — never paint it after boot.
-  if (next === CONN.UNKNOWN) return;
-
-  const prev      = _connState;
-  _connState      = next;
-  const isOffline = (next === CONN.OFFLINE);
+function setOfflineMode(isOffline) {
   state.isOfflineMode = isOffline;
-
   const badge  = document.getElementById("statusBadge");
   const banner = document.getElementById("offlineBanner");
-
-  // Atomically update badge + banner + queue + sync button in one shot.
-  if (badge) {
-    if (next === CONN.SYNCING) {
-      badge.className = "status-badge syncing";
-      badge.querySelector(".label").textContent = "Syncing…";
-    } else if (isOffline) {
-      badge.className = "status-badge offline";
-      badge.querySelector(".label").textContent = "Offline";
-    } else {
-      badge.className = "status-badge online";
-      badge.querySelector(".label").textContent = "Online";
-    }
+  if (!badge) return;
+  if (isOffline) {
+    badge.className = "status-badge offline";
+    badge.querySelector(".label").textContent = "Offline";
+    if (banner) banner.classList.add("visible");
+  } else {
+    badge.className = "status-badge online";
+    badge.querySelector(".label").textContent = "Online";
+    if (banner) banner.classList.remove("visible");
   }
-  if (banner) {
-    if (isOffline) banner.classList.add("visible");
-    else           banner.classList.remove("visible");
-  }
-
   updateQueueBadge();
   updateSyncButton();
-
-  if (triggerSync && prev !== CONN.ONLINE && next === CONN.ONLINE) {
-    syncLocalToServer();
-  }
 }
 
+// ── Connection state machine ────────────────────────────────────
+// Design invariants:
+//  • Startup is OPTIMISTIC: never mark offline until at least 2 consecutive
+//    ping failures (or navigator.onLine is hard-false).
+//  • A single slow/timed-out ping NEVER forces offline.
+//  • Apps Script cold-start can take up to 20 s — first ping timeout is 20 s,
+//    retries use 15 s.
+//  • Each ping carries a monotonic generation counter; a resolved promise from
+//    a prior generation is silently discarded (no stale overwrites).
+//  • Background re-ping runs every 30 s while the tab is visible; paused when
+//    document is hidden to avoid unnecessary wake-ups.
 
-async function updateOnlineStatus(triggerSync = false) {
-  if (ENV.isFile) {
-    applyConnectionState(CONN.OFFLINE);
-    dbg("Offline mode (file://)");
-    return;
-  }
-  if (!API) {
-    applyConnectionState(CONN.OFFLINE);
-    dbg("Offline mode (no API configured)");
-    return;
-  }
-  // navigator.onLine=false is a reliable OFFLINE signal but navigator.onLine=true
-  // is NOT a reliable ONLINE signal — still need a real ping.
-  if (!navigator.onLine) {
-    applyConnectionState(CONN.OFFLINE);
-    dbg("Offline mode (navigator.onLine=false)");
-    return;
-  }
+const PING_TIMEOUT_STARTUP  = 20000; // first probe — Apps Script cold-start
+const PING_TIMEOUT_RETRY    = 15000; // subsequent probes
+const PING_TIMEOUT_ROUTINE  = 12000; // periodic background checks
+const PING_FAIL_THRESHOLD   = 2;     // consecutive failures required before offline
+const PING_RETRY_DELAY      = 4000;  // ms between startup retries
+const PING_PERIODIC_INTERVAL= 30000; // ms between routine background pings
 
-  // Mutual-exclusion: only one ping/sync in flight at a time.
-  if (_connLock) { dbg("Connection check already in flight, skipping"); return; }
-  _connLock = true;
-
-  try {
-    // cache-busting timestamp prevents SW or HTTP cache returning stale 200.
-    const params = new URLSearchParams({ action: "PING", t: Date.now() });
-    const res = await fetch(API + "?" + params, {
-      signal:   makeAbortSignal(6000),
-      redirect: "follow",
-      // Bypass any cache — we need a real network response for the ping.
-      cache:    "no-store",
-    });
-    if (res.status >= 200 && res.status < 300) {
-      applyConnectionState(CONN.ONLINE, { triggerSync });
-      dbg("Ping OK — online");
-    } else {
-      throw new Error("HTTP " + res.status);
-    }
-  } catch (err) {
-    dbg("Ping failed →", err.message, "— offline");
-    applyConnectionState(CONN.OFFLINE);
-  } finally {
-    _connLock = false;
-  }
-}
-
-// Browser events fire after startup is complete only (_startupDone guard).
-window.addEventListener("online", () => {
-  if (!_startupDone) return;   // ignore during boot — ping handles startup
-  dbg("Browser online event");
-  clearTimeout(_connDebounce);
-  _connDebounce = setTimeout(() => updateOnlineStatus(true), 800);
-});
-window.addEventListener("offline", () => {
-  if (!_startupDone) return;
-  dbg("Browser offline event");
-  clearTimeout(_connDebounce);
-  // offline event is reliable — apply immediately without a ping.
-  applyConnectionState(CONN.OFFLINE);
-});
+let _pingGeneration    = 0;  // monotonic counter; incremented on every new ping attempt
+let _pingInProgress    = false;
+let _consecutiveFails  = 0;
+let _onlineDebounce    = null;
+let _periodicPingTimer = null;
 
 function makeAbortSignal(ms) {
   try { return AbortSignal.timeout(ms); }
   catch (_) { const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), ms); return ctrl.signal; }
 }
+
+// Perform a single ping and return true/false. Never throws.
+// Captures the generation at call-time and returns null if the result is stale.
+async function _doPing(timeoutMs) {
+  const gen = ++_pingGeneration;
+  try {
+    const params = new URLSearchParams({ action: "PING", t: Date.now() });
+    const res = await fetch(API + "?" + params, {
+      signal:   makeAbortSignal(timeoutMs),
+      redirect: "follow",
+    });
+    if (gen !== _pingGeneration) { dbg("Ping stale (gen mismatch), discarding"); return null; }
+    return res.status >= 200 && res.status < 300;
+  } catch {
+    if (gen !== _pingGeneration) { dbg("Ping stale (gen mismatch after error), discarding"); return null; }
+    return false;
+  }
+}
+
+// Core entry point — call this whenever connection state needs re-evaluation.
+// triggerSync: attempt syncLocalToServer() if we transition from offline→online.
+// isStartup:   first call on page load — uses longer timeout and is optimistic.
+async function updateOnlineStatus(triggerSync = false, isStartup = false) {
+  if (ENV.isFile) { setOfflineMode(true); return; }
+
+  if (!navigator.onLine) {
+    _consecutiveFails = PING_FAIL_THRESHOLD; // hard browser signal — trust it immediately
+    setOfflineMode(true);
+    dbg("Offline: navigator.onLine=false");
+    return;
+  }
+
+  if (!API) {
+    setOfflineMode(true);
+    dbg("Offline: no API configured");
+    return;
+  }
+
+  if (_pingInProgress) return;
+  _pingInProgress = true;
+
+  try {
+    const timeout = isStartup ? PING_TIMEOUT_STARTUP : PING_TIMEOUT_ROUTINE;
+    let success = await _doPing(timeout);
+
+    // Stale result — another ping superseded this one; do nothing.
+    if (success === null) return;
+
+    if (success) {
+      _consecutiveFails = 0;
+      const wasOffline  = state.isOfflineMode;
+      setOfflineMode(false);
+      if (triggerSync && wasOffline) syncLocalToServer();
+      _startPeriodicPing();
+      return;
+    }
+
+    // First probe failed — retry once with a shorter timeout before penalising.
+    dbg("Ping failed — retrying in", PING_RETRY_DELAY, "ms");
+    await new Promise(r => setTimeout(r, PING_RETRY_DELAY));
+
+    // If another ping has taken over while we were waiting, bail out.
+    if (!_pingInProgress) return;
+
+    const retryTimeout = isStartup ? PING_TIMEOUT_RETRY : PING_TIMEOUT_ROUTINE;
+    success = await _doPing(retryTimeout);
+    if (success === null) return;
+
+    if (success) {
+      _consecutiveFails = 0;
+      const wasOffline  = state.isOfflineMode;
+      setOfflineMode(false);
+      if (triggerSync && wasOffline) syncLocalToServer();
+      _startPeriodicPing();
+    } else {
+      _consecutiveFails++;
+      dbg("Ping failed after retry — consecutive failures:", _consecutiveFails);
+      if (_consecutiveFails >= PING_FAIL_THRESHOLD) {
+        setOfflineMode(true);
+        dbg("Offline threshold reached — switching to offline mode");
+      } else {
+        dbg("Below offline threshold — staying in current state");
+      }
+    }
+  } finally {
+    _pingInProgress = false;
+  }
+}
+
+function _startPeriodicPing() {
+  if (_periodicPingTimer) return; // already running
+  _periodicPingTimer = setInterval(() => {
+    if (document.hidden) return;
+    updateOnlineStatus(true);
+  }, PING_PERIODIC_INTERVAL);
+}
+
+window.addEventListener("online", () => {
+  dbg("Browser online event");
+  clearTimeout(_onlineDebounce);
+  _consecutiveFails = 0; // reset — browser says we're back
+  _onlineDebounce   = setTimeout(() => updateOnlineStatus(true), 1200);
+});
+window.addEventListener("offline", () => {
+  dbg("Browser offline event");
+  clearTimeout(_onlineDebounce);
+  _consecutiveFails = PING_FAIL_THRESHOLD;
+  setOfflineMode(true);
+});
 
 async function api(action, payload = {}) {
   if (!API) throw new Error("No API configured");
@@ -347,35 +381,19 @@ async function fetchWords() {
   try {
     const data = await api("GET");
     state.words = buildDeduplicatedWords(data);
-    // ── PATCH 3: Never overwrite a locally-dirty entry with server data.
-    // A word marked _local:true has unsaved edits — merging the server version
-    // on top would silently discard those edits (e.g. edit made between sync
-    // completing and fetchWords response arriving).
-    state.words.forEach(w => {
-      const existingLocal = state.localWords.find(
-        lw => String(lw.id) === String(w.id) ||
-              normalizeWord(lw.displayWord) === normalizeWord(w.displayWord)
-      );
-      if (existingLocal && existingLocal._local) {
-        // Word has unsynced local edits — do not overwrite with server version.
-        return;
-      }
-      mergeIntoLocalWords({ ...w, _local: false });
-    });
+    state.words.forEach(w => mergeIntoLocalWords({ ...w, _local: false }));
     saveLocalWords();
     render();
     updateStats();
   } catch (err) {
     console.error("Fetch failed:", err);
-    dbg("Fetch failed — rendering from localWords (not changing connection state)");
-    // DO NOT call setOfflineMode here. The connection state manager (ping) owns
-    // that decision. A failed GET does not mean we are offline — the API may have
-    // returned a transient error while the connection is fine.
-    // Falling back to localWords is the correct behaviour without state mutation.
+    dbg("Fetch failed, falling back to localWords");
     if (state.localWords.length === 0) {
       showEmptyFallback("Failed to load. Check your connection.");
       toast("Failed to load words. Check your connection.", "error");
     }
+    // Do NOT call setOfflineMode(true) here — a single GET failure does not
+    // mean the connection is lost. The ping layer handles connection state.
   }
 }
 
@@ -434,115 +452,36 @@ async function syncLocalToServer() {
   if (!navigator.onLine || state.isOfflineMode) return;
 
   _syncInProgress = true;
-  _connLock = true;   // block ping from interrupting sync
   dbg("Sync started — localDirty:", localDirty.length, "queue:", state.queue.length);
 
-  applyConnectionState(CONN.SYNCING);
+  const badge  = document.getElementById("statusBadge");
   const syncBtn = document.getElementById("syncBtn");
+  if (badge) { badge.className = "status-badge syncing"; badge.querySelector(".label").textContent = "Syncing…"; }
   if (syncBtn) { syncBtn.disabled = true; syncBtn.textContent = "⟳ Syncing…"; }
 
   let syncedCount = 0;
   let failedCount = 0;
 
-  try {
-    for (const localWord of localDirty) {
-      const entries = Array.isArray(localWord.entries) ? localWord.entries : [];
+  for (const localWord of localDirty) {
+    const entries = Array.isArray(localWord.entries) ? localWord.entries : [];
 
-      let allEntriesSynced = true;
-      let serverResult = null;
+    let allEntriesSynced = true;
+    let serverResult = null;
 
-      // ── PATCH 2: Rename branch — clear _renamedFrom then FALL THROUGH to
-      // entry sync for the same word. Do NOT bare-continue past entry processing.
-      // This prevents silent loss of offline edits made after an offline rename.
-      let renameHandled = false;
-      if (localWord._renamedFrom) {
-        try {
-          const result = await api("RENAME_WORD", {
-            id:          String(localWord.id),
-            displayWord: localWord.displayWord,
-          });
-          serverResult = result;
-          mergeResultIntoState(result);
-          syncedCount++;
-          // Clear only the rename flag — leave _local so entry sync can run below.
-          const ridx = state.localWords.findIndex(w => w.id === localWord.id);
-          if (ridx >= 0) {
-            delete state.localWords[ridx]._renamedFrom;
-          }
-          // Update localWord reference to reflect cleared flag before entry loop.
-          delete localWord._renamedFrom;
-          renameHandled = true;
-        } catch (err) {
-          dbg("Sync RENAME failed:", localWord.displayWord, err.message);
-          allEntriesSynced = false;
-          failedCount++;
-          // Rename failed — skip entry sync for this word to avoid corrupt state.
-          continue;
-        }
-      }
-
-      if (entries.length === 0) {
-        try {
-          const result = await api("ADD", {
-            displayWord: localWord.displayWord,
-            def: "",
-            ex:  localWord._savedEx || "",
-          });
-          serverResult = result;
-          mergeResultIntoState(result);
-          syncedCount++;
-        } catch (err) {
-          dbg("Sync failed for incomplete word:", localWord.displayWord, err.message);
-          allEntriesSynced = false;
-          failedCount++;
-        }
-
-        if (allEntriesSynced && serverResult) {
-          const idx = state.localWords.findIndex(w => w.id === localWord.id);
-          if (idx >= 0) {
-            state.localWords[idx] = { ...serverResult, _local: false };
-          }
-        }
-        continue;
-      }
-
-      // After a successful rename, the word now has a server ID — treat remaining
-      // entries as belonging to a server-backed word (not local_).
-      const isNewWord = !renameHandled && String(localWord.id).startsWith("local_");
-
-      for (const entry of entries) {
-        try {
-          let result;
-          if (isNewWord) {
-            result = await api("ADD", {
-              displayWord: localWord.displayWord,
-              def: entry.def,
-              ex:  entry.ex || "",
-            });
-          } else {
-            if (entry._pendingAdd) {
-              result = await api("ADD", {
-                displayWord: localWord.displayWord,
-                def: entry.def,
-                ex:  entry.ex || "",
-              });
-            } else {
-              result = await api("UPDATE", {
-                id:      String(localWord.id),
-                entryId: String(entry.id),
-                def:     entry.def,
-                ex:      entry.ex || "",
-              });
-            }
-          }
-          serverResult = result;
-          mergeResultIntoState(result);
-          syncedCount++;
-        } catch (err) {
-          dbg("Sync failed for word:", localWord.displayWord, err.message);
-          allEntriesSynced = false;
-          failedCount++;
-        }
+    // Handle RENAME: word has _renamedFrom flag
+    if (localWord._renamedFrom) {
+      try {
+        const result = await api("RENAME_WORD", {
+          id:          String(localWord.id),
+          displayWord: localWord.displayWord,
+        });
+        serverResult = result;
+        mergeResultIntoState(result);
+        syncedCount++;
+      } catch (err) {
+        dbg("Sync RENAME failed:", localWord.displayWord, err.message);
+        allEntriesSynced = false;
+        failedCount++;
       }
 
       if (allEntriesSynced && serverResult) {
@@ -551,44 +490,113 @@ async function syncLocalToServer() {
           state.localWords[idx] = { ...serverResult, _local: false };
         }
       }
+      continue;
     }
 
-    const pending   = [...state.queue];
-    state.queue     = [];
-    for (const item of pending) {
+    // Legacy path: entries:[] words saved before the buildLocalWord fix.
+    // Send with empty def/ex — server will store it as incomplete.
+    if (entries.length === 0) {
       try {
-        const result = await api("ADD", item);
+        const result = await api("ADD", {
+          displayWord: localWord.displayWord,
+          def: "",
+          ex:  localWord._savedEx || "",
+        });
+
+        serverResult = result;
         mergeResultIntoState(result);
         syncedCount++;
-      } catch {
-        state.queue.push(item);
+      } catch (err) {
+        dbg("Sync failed for incomplete word:", localWord.displayWord, err.message);
+        allEntriesSynced = false;
+        failedCount++;
+      }
+
+      if (allEntriesSynced && serverResult) {
+        const idx = state.localWords.findIndex(w => w.id === localWord.id);
+        if (idx >= 0) {
+          state.localWords[idx] = { ...serverResult, _local: false };
+        }
+      }
+
+      continue;
+    }
+
+    const isNewWord = String(localWord.id).startsWith("local_");
+
+    for (const entry of entries) {
+      try {
+        let result;
+        if (isNewWord) {
+          result = await api("ADD", {
+            displayWord: localWord.displayWord,
+            def: entry.def,
+            ex:  entry.ex || "",
+          });
+        } else {
+          if (entry._pendingAdd) {
+            result = await api("ADD", {
+              displayWord: localWord.displayWord,
+              def: entry.def,
+              ex:  entry.ex || "",
+            });
+          } else {
+            result = await api("UPDATE", {
+              id:      String(localWord.id),
+              entryId: String(entry.id),
+              def:     entry.def,
+              ex:      entry.ex || "",
+            });
+          }
+        }
+        serverResult = result;
+        mergeResultIntoState(result);
+        syncedCount++;
+      } catch (err) {
+        dbg("Sync failed for word:", localWord.displayWord, err.message);
+        allEntriesSynced = false;
         failedCount++;
       }
     }
 
-    saveLocalWords();
-    saveQueue();
-
-  } finally {
-    // ── PATCH 1: Guarantee flags and connection state always reset,
-    // even if an unhandled exception escapes the sync body.
-    _syncInProgress = false;
-    _connLock = false;
-    // Always return to ONLINE after sync — never fall back to OFFLINE
-    // unless a real ping failure occurs.
-    applyConnectionState(CONN.ONLINE);
-    if (syncBtn) {
-      syncBtn.disabled = false;
-      syncBtn.textContent = "⟳ Sync";
-      updateSyncButton();
+    if (allEntriesSynced && serverResult) {
+      const idx = state.localWords.findIndex(w => w.id === localWord.id);
+      if (idx >= 0) {
+        state.localWords[idx] = { ...serverResult, _local: false };
+      }
     }
+  }
+
+  const pending   = [...state.queue];
+  state.queue     = [];
+  for (const item of pending) {
+    try {
+      const result = await api("ADD", item);
+      mergeResultIntoState(result);
+      syncedCount++;
+    } catch {
+      state.queue.push(item);
+      failedCount++;
+    }
+  }
+
+  saveLocalWords();
+  saveQueue();
+
+  _syncInProgress = false;
+
+  if (badge) { badge.className = "status-badge online"; badge.querySelector(".label").textContent = "Online"; }
+  if (syncBtn) {
+    syncBtn.disabled = false;
+    syncBtn.textContent = "⟳ Sync";
+    updateSyncButton();
   }
 
   if (failedCount === 0) {
     dbg("Sync success — synced:", syncedCount);
     if (syncedCount > 0) toast(`Synced ${syncedCount} item(s) to server.`, "success");
   } else {
-    dbg("Sync partial — synced:", syncedCount, "failed:", failedCount);
+    dbg("Sync failed (partial) — synced:", syncedCount, "failed:", failedCount);
     toast(`Synced ${syncedCount}, ${failedCount} still pending.`, "warning");
   }
 
@@ -848,13 +856,6 @@ async function confirmMerge() {
   const checkWord = currentWord || existingWord;
   if (def && hasDuplicateDef(checkWord.entries, def)) {
     toast("This definition already exists for this word.", "warning");
-    return;
-  }
-  // ── PATCH 6: Example-only duplicate protection.
-  // The def && guard above skips the check when def is empty.
-  // Without this, the same example can be added infinitely via the merge modal.
-  if (!def && ex && (checkWord.entries || []).some(e => !e.def && e.ex === ex)) {
-    toast("This example already exists for this word.", "warning");
     return;
   }
 
@@ -1144,9 +1145,7 @@ async function updateWord(displayWord, def, ex) {
 }
 
 async function deleteWord(id) {
-  // ── PATCH 4: Block delete during UNKNOWN startup state (isOfflineMode===null)
-  // and during confirmed offline. Only allow when explicitly online.
-  if (state.isOfflineMode !== false) {
+  if (state.isOfflineMode) {
     toast("Internet connection required to delete.", "warning");
     return;
   }
@@ -1172,9 +1171,7 @@ async function deleteWord(id) {
 }
 
 async function deleteEntry(wordId, entryId) {
-  // ── PATCH 4: Block delete during UNKNOWN startup state (isOfflineMode===null)
-  // and during confirmed offline. Only allow when explicitly online.
-  if (state.isOfflineMode !== false) {
+  if (state.isOfflineMode) {
     toast("Internet connection required to delete.", "warning");
     return;
   }
@@ -1790,11 +1787,7 @@ function importCSV(file) {
           if (isDuplicate) { skipped++; continue; }
 
           const newEntryId = existing.id + "_e" + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
-          // ── PATCH 5: Mark _pendingAdd on entries for server-backed words.
-          // Without this flag, syncLocalToServer would route a failed-online
-          // import entry as UPDATE (wrong) instead of ADD on retry.
-          const isServerBacked = !String(existing.id).startsWith("local_");
-          const newEntry   = { id: newEntryId, def: defTrimmed, ex: exTrimmed, ...(isServerBacked ? { _pendingAdd: true } : {}) };
+          const newEntry   = { id: newEntryId, def: defTrimmed, ex: exTrimmed };
           existing.entries = [...existing.entries, newEntry];
           const localWord  = state.localWords.find(w => String(w.id) === String(existing.id));
           if (localWord) {
@@ -1820,8 +1813,6 @@ function importCSV(file) {
           saveLocalWords();
           ok++;
         } catch {
-          // Server ADD failed — entry stays in localWords with _pendingAdd so
-          // syncLocalToServer will retry it as ADD (not UPDATE) on reconnect.
           fail++;
         }
       } else {
@@ -1993,6 +1984,12 @@ document.addEventListener("keydown", function(e) {
   }
 });
 
+// ── Startup sequence ───────────────────────────────────────────
+// 1. Render from localWords immediately (app is usable at once).
+// 2. Set initial online state OPTIMISTICALLY — assume online if navigator.onLine
+//    is true, so the UI never flickers to offline before the first ping returns.
+// 3. Kick off ping with extended cold-start timeout in the background.
+// 4. fetchWords runs in parallel and will populate from server when ping succeeds.
 setView(state.view);
 if (state.localWords.length > 0) {
   state.words = buildDeduplicatedWords(state.localWords);
@@ -2002,49 +1999,11 @@ if (state.localWords.length > 0) {
   showLoadingState();
 }
 
-// ── STARTUP SEQUENCE ─────────────────────────────────────────────
-// 1. Render immediately from localWords (done above).
-// 2. Run the authoritative ping — this is the ONLY place that decides
-//    online vs offline on startup. Browser events are suppressed until
-//    this resolves (_startupDone).
-// 3. If online, fetch fresh data from server.
-// 4. Mark startup done so browser online/offline events activate.
-(async () => {
-  await updateOnlineStatus(false);  // ping — sets _connState authoritatively
+// Optimistic startup: if navigator.onLine and we have an API, assume online
+// immediately so the UI starts in Online state without waiting for the ping.
+// The ping will correct this if the API is actually unreachable.
+if (!ENV.isFile && navigator.onLine && API) {
+  setOfflineMode(false);
+}
 
-  // ── PATCH 8: Legacy queue drain.
-  // state.queue items were written by older app versions. Nothing in the current
-  // codebase writes to the queue (the _local/localWords system replaced it).
-  // Any items still in localStorage are from the old system. Attempt a single
-  // best-effort ADD for each, then clear the queue unconditionally so stale items
-  // do not loop forever and inflate the unsynced badge.
-  if (state.queue.length > 0 && !state.isOfflineMode) {
-    dbg("Legacy queue drain — items:", state.queue.length);
-    const legacyItems = [...state.queue];
-    state.queue = [];
-    for (const item of legacyItems) {
-      try {
-        const result = await api("ADD", item);
-        mergeResultIntoState(result);
-        dbg("Legacy queue item drained:", item.displayWord || item);
-      } catch (err) {
-        dbg("Legacy queue item drain failed (discarding):", err.message);
-        // Intentionally discarded — do NOT push back. Old format may never succeed.
-      }
-    }
-    saveQueue();
-  } else if (state.queue.length > 0) {
-    // Offline on startup — keep queue for next drain attempt, but cap at 50
-    // items to prevent unbounded growth from very old localStorage state.
-    if (state.queue.length > 50) {
-      state.queue = state.queue.slice(0, 50);
-      saveQueue();
-    }
-  }
-
-  if (!state.isOfflineMode) {
-    await fetchWords();             // fetch only if ping confirmed online
-  }
-  _startupDone = true;             // enable browser online/offline events
-  dbg("Startup complete — connection:", _connState);
-})();
+updateOnlineStatus(false, true).then(() => fetchWords());
